@@ -1,0 +1,44 @@
+# Flatpak manifest for Editroom LX.  Build with:
+#   flatpak install flathub org.kde.Platform//6.10 org.kde.Sdk//6.10 org.freedesktop.Platform.ffmpeg-full//24.08
+#   flatpak-builder --user --install --force-clean build/flatpak packaging/flatpak/com.wonderassembly.EditroomLX.yml
+# FFmpeg comes from the KDE runtime (LGPL build); codecs it lacks come from the ffmpeg-full extension, which the
+# person installs themselves, so the app itself carries no GPL code.
+id: com.wonderassembly.EditroomLX
+runtime: org.kde.Platform
+runtime-version: '6.10'
+sdk: org.kde.Sdk
+command: editroom-lx
+rename-desktop-file: editroom.desktop
+rename-icon: editroom
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  # Media lives anywhere: the person's files, removable drives.
+  - --filesystem=host
+  # The MCP server for AI agents listens on 127.0.0.1:47920; model downloads only when asked.
+  - --share=network
+  - --talk-name=org.freedesktop.FileManager1
+add-extensions:
+  org.freedesktop.Platform.ffmpeg-full:
+    directory: lib/ffmpeg
+    version: '24.08'
+    add-ld-path: .
+cleanup-commands:
+  - mkdir -p /app/lib/ffmpeg
+modules:
+  - name: libheif
+    buildsystem: cmake-ninja
+    config-opts: [-DCMAKE_BUILD_TYPE=Release, -DWITH_EXAMPLES=OFF, -DWITH_GDK_PIXBUF=OFF]
+    sources:
+      - type: archive
+        url: https://github.com/strukturag/libheif/releases/download/v1.19.5/libheif-1.19.5.tar.gz
+        sha256: d3cf0a76076115a070f9bc87cf5259b333a1f05806500045338798486d0afbaf
+  - name: editroom-lx
+    buildsystem: cmake-ninja
+    config-opts: [-DCMAKE_BUILD_TYPE=Release, -DEDITROOM_BUILD_TESTS=OFF]
+    sources:
+      - type: dir
+        path: ../..

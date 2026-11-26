@@ -1,0 +1,56 @@
+#version 450
+// Float RGBA (from rendering.comp) to NV12, BT.709 limited range: the encoder's input, read back once.
+// Each invocation writes one 32-bit word: four Y samples, or two CbCr pairs (each the 2×2 average).
+#extension GL_GOOGLE_include_directive : require
+
+layout(local_size_x = 64) in;
+
+#include "ColorMath.h"
+
+layout(std430, set = 0, binding = 0) readonly buffer FrameBuf { ErFrame frameData; };
+layout(std430, set = 0, binding = 5) writeonly buffer OutBuf { uint outWords[]; };
+layout(std430, set = 0, binding = 6) buffer FloatBuf { vec4 outFloat[]; };
+
+layout(push_constant) uniform Push { int mode; } pc;
+
+vec3 rgbAt(int x, int y) {
+    int w = frameData.outW;
+    int h = frameData.outH;
+    vec4 c = outFloat[min(y, h - 1) * w + min(x, w - 1)];
+    return vec3(er_clamp01(c.x), er_clamp01(c.y), er_clamp01(c.z));
+}
+
+int code(float v) { return clamp(int(floor(v + 0.5)), 0, 255); }
+
+void main() {
+    int w = frameData.outW;
+    int h = frameData.outH;
+    int lumaWords = (w * h + 3) / 4;
+    int cw = (w + 1) / 2;
+    int ch = (h + 1) / 2;
+    int chromaWords = (cw * ch * 2 + 3) / 4;
+    int i = int(gl_GlobalInvocationID.x);
+    if (i < lumaWords) {
+        uint word = 0u;
+        for (int k = 0; k < 4; k++) {
+            int n = i * 4 + k;
+            if (n >= w * h) break;
+            vec3 yuv = er_rgb_to_yuv709(rgbAt(n % w, n / w), 255.0);
+            word = word | (uint(code(yuv.x)) << uint(k * 8));
+        }
+        outWords[i] = word;
+    } else if (i < lumaWords + chromaWords) {
+        int j = i - lumaWords;
+        uint word = 0u;
+        for (int k = 0; k < 2; k++) {
+            int n = j * 2 + k; // chroma pair index
+            if (n >= cw * ch) break;
+            int x = (n % cw) * 2;
+            int y = (n / cw) * 2;
+            vec3 sum = rgbAt(x, y) + rgbAt(x + 1, y) + rgbAt(x, y + 1) + rgbAt(x + 1, y + 1);
+            vec3 yuv = er_rgb_to_yuv709(sum / 4.0, 255.0);
+            word = word | (uint(code(yuv.y)) << uint(k * 16)) | (uint(code(yuv.z)) << uint(k * 16 + 8));
+        }
+        outWords[i] = word;
+    }
+}

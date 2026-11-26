@@ -1,0 +1,282 @@
+{
+  "futureDocumentKey" : "kept",
+  "project" : {
+    "assets" : [
+      {
+        "bookmark" : "Ym9va21hcmtkYXRh",
+        "duration" : 12.5,
+        "fps" : 29.97002997002997,
+        "hasAudio" : true,
+        "height" : 2160,
+        "id" : "A0000000-0000-4000-8000-000000000001",
+        "kind" : "video",
+        "name" : "boat_wide.mov",
+        "path" : "\/Users\/me\/Movies\/Trip\/boat_wide.mov",
+        "playablePath" : "\/Users\/me\/Library\/Caches\/Editroom\/Converted\/boat_wide.mov",
+        "relativePath" : "..\/Movies\/Trip\/boat_wide.mov",
+        "width" : 3840
+      },
+      {
+        "duration" : 180,
+        "fps" : 0,
+        "hasAudio" : true,
+        "height" : 0,
+        "id" : "A0000000-0000-4000-8000-000000000002",
+        "kind" : "audio",
+        "name" : "music.m4a",
+        "path" : "\/Users\/me\/Music\/music.m4a",
+        "width" : 0
+      }
+    ],
+    "audioTracks" : [
+      {
+        "duckDB" : -12,
+        "duckUnder" : "B0000000-0000-4000-8000-000000000002",
+        "gainDB" : -3.5,
+        "hidden" : false,
+        "id" : "B0000000-0000-4000-8000-000000000001",
+        "kind" : "audio",
+        "locked" : false,
+        "muted" : false,
+        "solo" : false
+      },
+      {
+        "duckDB" : -12,
+        "gainDB" : 0,
+        "hidden" : false,
+        "id" : "B0000000-0000-4000-8000-000000000002",
+        "kind" : "audio",
+        "locked" : false,
+        "muted" : false,
+        "solo" : true
+      }
+    ],
+    "captionFixes" : [
+      "A0000000-0000-4000-8000-000000000001",
+      [
+        {
+          "start" : 1.1,
+          "text" : "So"
+        },
+        {
+          "merged" : true,
+          "start" : 1.35,
+          "text" : ""
+        }
+      ]
+    ],
+    "captions" : {
+      "hidden" : false,
+      "style" : {
+        "highlight" : true,
+        "highlightColor" : {
+          "a" : 1,
+          "b" : 0.25,
+          "g" : 0.84,
+          "r" : 1
+        },
+        "outline" : true,
+        "outlineColor" : {
+          "a" : 1,
+          "b" : 0,
+          "g" : 0,
+          "r" : 0
+        },
+        "size" : 64,
+        "textColor" : {
+          "a" : 1,
+          "b" : 1,
+          "g" : 1,
+          "r" : 1
+        },
+        "y" : 0.78
+      }
+    },
+    "clips" : [
+      {
+        "assetID" : "A0000000-0000-4000-8000-000000000001",
+        "captioned" : true,
+        "color" : {
+          "a" : 1,
+          "b" : 0.2,
+          "g" : 0.16,
+          "r" : 0.16
+        },
+        "duration" : 4,
+        "fadeIn" : 0.5,
+        "fadeInCurve" : "smooth",
+        "fadeOut" : 0,
+        "gainDB" : 0,
+        "grade" : {
+          "contrast" : 12,
+          "exposure" : 0.25,
+          "highlights" : {
+            "x" : 0,
+            "y" : 0
+          },
+          "look" : "Film print",
+          "lookIntensity" : 0.8,
+          "midtones" : {
+            "x" : 0.1,
+            "y" : -0.2
+          },
+          "saturation" : -10,
+          "shadows" : {
+            "x" : 0,
+            "y" : 0
+          },
+          "temperature" : 5,
+          "tint" : 0
+        },
+        "id" : "C0000000-0000-4000-8000-000000000001",
+        "kind" : "video",
+        "linkID" : "D0000000-0000-4000-8000-000000000001",
+        "ramp" : {
+          "endSpeed" : 1,
+          "inFrom" : 0.5,
+          "inTo" : 1.5,
+          "outFrom" : 3.5,
+          "outTo" : 4.5,
+          "startSpeed" : 1
+        },
+        "sourceStart" : 0.5,
+        "speed" : 4,
+        "start" : 0,
+        "text" : {
+          "bold" : true,
+          "color" : {
+            "a" : 1,
+            "b" : 1,
+            "g" : 1,
+            "r" : 1
+          },
+          "fontName" : "",
+          "size" : 110,
+          "string" : "Text",
+          "x" : 0.5,
+          "y" : 0.5
+        },
+        "trackID" : "E0000000-0000-4000-8000-000000000001",
+        "transform" : {
+          "scale" : 2,
+          "x" : 0.25,
+          "y" : -0.1,
+          "zoom" : {
+            "mode" : "inOut",
+            "p1" : 0,
+            "p2" : 1,
+            "p3" : 3,
+            "p4" : 4,
+            "smooth" : true
+          }
+        },
+        "unknownClipKey" : {
+          "nested" : [
+            1,
+            "two"
+          ]
+        }
+      },
+      {
+        "color" : {
+          "a" : 1,
+          "b" : 0.2,
+          "g" : 0.16,
+          "r" : 0.16
+        },
+        "duration" : 3,
+        "fadeIn" : 0,
+        "fadeOut" : 1,
+        "fadeOutCurve" : "easeOut",
+        "freeze" : true,
+        "gainDB" : 0,
+        "id" : "C0000000-0000-4000-8000-000000000002",
+        "kind" : "text",
+        "reversed" : true,
+        "reversedFrom" : {
+          "assetID" : "A0000000-0000-4000-8000-000000000001",
+          "sourceStart" : 2
+        },
+        "sourceStart" : 0,
+        "speed" : 1,
+        "start" : 4,
+        "text" : {
+          "bold" : false,
+          "color" : {
+            "a" : 1,
+            "b" : 0.24,
+            "g" : 0.7,
+            "r" : 0.95
+          },
+          "fontName" : "Helvetica Neue",
+          "size" : 72,
+          "string" : "The “end” — or is it?\nYes.",
+          "x" : 0.5,
+          "y" : 0.2
+        },
+        "trackID" : "E0000000-0000-4000-8000-000000000002",
+        "transitionIn" : {
+          "duration" : 0.5,
+          "kind" : "dipToBlack"
+        }
+      }
+    ],
+    "exportDir" : "\/Users\/me\/Movies",
+    "exportName" : "Trip cut",
+    "folders" : [
+      {
+        "bookmark" : "Zm9sZGVy",
+        "id" : "F0000000-0000-4000-8000-000000000001",
+        "path" : "\/Users\/me\/Movies\/Trip",
+        "relativePath" : "..\/Movies\/Trip"
+      }
+    ],
+    "fps" : 30,
+    "height" : 1080,
+    "hiddenMedia" : [
+      "\/Users\/me\/Movies\/Trip\/junk.mov"
+    ],
+    "inPoint" : 1,
+    "magicHistory" : [
+      {
+        "date" : 786000000.5,
+        "tab" : "local",
+        "text" : "make a quick cut"
+      }
+    ],
+    "markers" : [
+      {
+        "id" : "90000000-0000-4000-8000-000000000001",
+        "name" : "Beat drop",
+        "time" : 1.2,
+        "tint" : "green"
+      }
+    ],
+    "outPoint" : 6.5,
+    "settingsLocked" : true,
+    "videoTracks" : [
+      {
+        "duckDB" : -12,
+        "gainDB" : 0,
+        "hidden" : false,
+        "id" : "E0000000-0000-4000-8000-000000000001",
+        "kind" : "video",
+        "locked" : false,
+        "muted" : false,
+        "solo" : false
+      },
+      {
+        "duckDB" : -12,
+        "gainDB" : 0,
+        "hidden" : true,
+        "id" : "E0000000-0000-4000-8000-000000000002",
+        "kind" : "video",
+        "locked" : true,
+        "muted" : false,
+        "solo" : false
+      }
+    ],
+    "width" : 1920
+  },
+  "version" : 1
+}

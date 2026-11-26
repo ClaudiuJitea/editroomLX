@@ -1,0 +1,49 @@
+#version 450
+// The timeline compositor on the GPU: Kernel.inc (shared with CpuRenderer.cpp) once per output pixel.
+// The whole composite of a frame — every layer, the source colour and grade cubes, the transition, the
+// reframe and the captions — is this one dispatch; pack.comp then makes NV12 for the encoder.
+#extension GL_GOOGLE_include_directive : require
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+#include "ColorMath.h"
+
+layout(std430, set = 0, binding = 0) readonly buffer FrameBuf { ErFrame frameData; };
+layout(std430, set = 0, binding = 1) readonly buffer LayerBuf { ErLayer layers[]; };
+layout(std430, set = 0, binding = 2) readonly buffer SourceBuf { ErSource sources[]; };
+layout(std430, set = 0, binding = 3) readonly buffer PixelBuf { uint pixels[]; };
+layout(std430, set = 0, binding = 4) readonly buffer CubeBuf { float cubes[]; };
+layout(std430, set = 0, binding = 5) writeonly buffer OutBuf { uint outWords[]; };
+layout(std430, set = 0, binding = 6) buffer FloatBuf { vec4 outFloat[]; };
+
+layout(push_constant) uniform Push { int mode; } pc; // 0: RGBA8, 1: float RGBA
+
+ErFrame er_frame() { return frameData; }
+ErLayer er_layer(int i) { return layers[i]; }
+ErSource er_source(int i) { return sources[i]; }
+int er_byte(ErSource s, int o) { return int((pixels[o >> 2] >> uint((o & 3) * 8)) & 255u); }
+// Whole words where the offset allows (it nearly always does: planes and rows are 4-byte aligned), so a
+// texel costs one or two loads rather than one per byte.
+int er_u16(ErSource s, int o) {
+    if ((o & 3) != 3) return int((pixels[o >> 2] >> uint((o & 3) * 8)) & 65535u);
+    return er_byte(s, o) | (er_byte(s, o + 1) << 8);
+}
+ivec2 er_u16x2(ErSource s, int o) {
+    if ((o & 3) == 0) { uint w = pixels[o >> 2]; return ivec2(int(w & 65535u), int(w >> 16)); }
+    return ivec2(er_u16(s, o), er_u16(s, o + 2));
+}
+float er_cubef(int i) { return cubes[i]; }
+
+#include "Kernel.inc"
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= frameData.outW || p.y >= frameData.outH) return;
+    vec4 c = er_output_pixel(p.x, p.y);
+    int i = p.y * frameData.outW + p.x;
+    if (pc.mode == 1) {
+        outFloat[i] = c;
+    } else {
+        outWords[i] = uint(er_to8(c.x)) | (uint(er_to8(c.y)) << 8) | (uint(er_to8(c.z)) << 16) | (255u << 24);
+    }
+}

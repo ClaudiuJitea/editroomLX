@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Editroom
+GenericName=Video Editor
+Comment=Edit video with a timeline, and with Magic
+Exec=editroom-lx %F
+Icon=editroom
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+MimeType=application/x-editroom-project;video/mp4;video/quicktime;video/x-matroska;video/webm;audio/wav;audio/mpeg;image/jpeg;image/png;
+StartupWMClass=editroom
+Keywords=video;editor;timeline;cut;

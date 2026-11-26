@@ -1,0 +1,1358 @@
+{
+ "mac": "7b7b865",
+ "strings": {
+  "+\\(queue.waiting)": {
+   "mac": [
+    "UI/ExportProgress.swift"
+   ]
+  },
+  ".": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "/ ": {
+   "mac": [
+    "UI/PreviewView.swift"
+   ]
+  },
+  "@": {
+   "mac": [
+    "UI/MagicPopover.swift",
+    "UI/MentionField.swift"
+   ]
+  },
+  "A file with this name already exists in \\(folder.lastPathComponent).": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "A new version of \\(name) is available!": {
+   "mac": [
+    "App/UpdateDriver.swift"
+   ]
+  },
+  "A\\(item.offset + 1)": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "About Editroom": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Add Audio Track": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Add Dissolve": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Add Marker": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Add Solid": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Add Text": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Add Video Track": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Add \\(label) Track": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Add to Timeline": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Apple Intelligence": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Apple Intelligence couldn't read that: \\(error.localizedDescription)": {
+   "mac": [
+    "Magic/LocalBrain.swift"
+   ]
+  },
+  "Audio": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Audio Scrubbing": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Automatically download and install updates in the future": {
+   "mac": [
+    "App/UpdateDriver.swift"
+   ]
+  },
+  "Bold": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "C1": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Cancel": {
+   "mac": [
+    "Magic/MagicAgent.swift",
+    "Model/EditorModel.swift",
+    "UI/ExportSheet.swift",
+    "UI/MagicPopover.swift",
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Caption": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Captions": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Captions: click for their style": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Change Shortcut": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Changed from the default": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Check for Updates…": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Check for updates automatically": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Choose": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Choose where exports are saved": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Claude Code isn't installed.": {
+   "mac": [
+    "MCP/AgentConnect.swift"
+   ]
+  },
+  "Clear All Markers": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Clear Finished": {
+   "mac": [
+    "UI/ExportProgress.swift"
+   ]
+  },
+  "Clear In and Out": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Clear In and Out (⇧X)": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Clear Menu": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Click to type a time": {
+   "mac": [
+    "UI/PreviewView.swift"
+   ]
+  },
+  "Clip": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Close All Gaps": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Connect": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Connect \\(kind.name)": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Connected apps use your own Claude or ChatGPT plan; no API key needed. Disconnecting stops Editroom answering that app, for Magic and for edits you ask for in the app.": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Continue": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Contrast": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Copy Grade": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Couldn't download it: \\(error.localizedDescription)": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "Couldn't make the Claude extension.": {
+   "mac": [
+    "MCP/AgentConnect.swift"
+   ]
+  },
+  "Couldn't read the sound.": {
+   "mac": [
+    "Engine/Reverser.swift"
+   ]
+  },
+  "Delete": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "Model/EditorModel.swift",
+    "UI/LibraryView.swift",
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Delete Caption Track": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Delete Folder": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Delete Marker": {
+   "mac": [
+    "UI/TimelineCanvas.swift"
+   ]
+  },
+  "Delete Track": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Delete \\(pickedCount) Items": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Detach Audio": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Discard": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Discard unsaved changes?": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Disconnect": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Don't Save": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Done": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Down \\(Int(-db)) dB": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Download \\(kind.name)": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Drag to tint \\(title.lowercased()). Double-click to reset.": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Drop to import": {
+   "mac": [
+    "UI/ContentView.swift"
+   ]
+  },
+  "Duck Under": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Ducks under another track": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Duplicate": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Each update lists what's new before you install it. Every version's notes are on GitHub.": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Effort": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Enable Magic": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Even Out Audio Levels": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Export": {
+   "mac": [
+    "UI/ContentView.swift",
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Export (\\(ShortcutStore.shared.combos(.export).first?.display ?? ": {
+   "mac": [
+    "UI/ContentView.swift"
+   ]
+  },
+  "Export failed": {
+   "mac": [
+    "UI/ExportProgress.swift"
+   ]
+  },
+  "Exported": {
+   "mac": [
+    "UI/ExportProgress.swift"
+   ]
+  },
+  "Exports": {
+   "mac": [
+    "UI/ExportProgress.swift"
+   ]
+  },
+  "Export…": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Exposure": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Fade In": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Fade Out": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Fill": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Filmstrips": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Finish in the Claude app": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Fixed here, a word stays fixed wherever this clip is used. Delete leaves the caption's words out.": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Frame": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Frame rate": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Freeze Frame": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Get \\(app.title)": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Get the \\(kind.name) app": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Go to \\(label) (\\(label == ": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Grade": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "High": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Highlights": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "History": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "How hard \\(kind.name) thinks: higher is slower and uses more of your plan": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "How long the clip plays with its ramp": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Ideas": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Import": {
+   "mac": [
+    "Model/EditorModel.swift",
+    "UI/ContentView.swift"
+   ]
+  },
+  "Import Media…": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Imported media\\nappears here": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "In to out · ": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Include audio": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Intensity": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Keep Current": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Length": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Let AI apps edit in Editroom": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Listening for what's said in the captioned clips…": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Load": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Load .cube…": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Local couldn't read that": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Locate": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Locate the folder “\\(f.name)”": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Locate “\\(original.lastPathComponent)”": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Locate…": {
+   "mac": [
+    "Model/EditorModel.swift",
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Look": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "MARKER": {
+   "mac": [
+    "UI/TimelineCanvas.swift"
+   ]
+  },
+  "MEDIA": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "MP4 Video": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Make it": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Mark": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Match": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Match Sequence to Clip": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Match the sequence to “\\(asset.name)”?": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Matches the first video you import.": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Midtones": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Model": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Name": {
+   "mac": [
+    "UI/TimelineCanvas.swift"
+   ]
+  },
+  "New": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "No API key needed": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "No fonts match": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "None": {
+   "mac": [
+    "UI/InspectorView.swift",
+    "UI/SettingsView.swift",
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Not Now": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Nothing to caption": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "OK": {
+   "mac": [
+    "UI/ContentView.swift"
+   ]
+  },
+  "Open": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Open Claude": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Open Claude Again": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Open Claude Code once": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Open Claude again": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Open Recent": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Open…": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Output level, left and right": {
+   "mac": [
+    "UI/PreviewView.swift"
+   ]
+  },
+  "Paste Grade": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Play / Pause (Space)": {
+   "mac": [
+    "UI/PreviewView.swift"
+   ]
+  },
+  "Play preview": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Playback": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Position": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Press keys…": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Redo": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Release Notes": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Reload Folder from Disk": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Remind Me Later": {
+   "mac": [
+    "App/UpdateDriver.swift"
+   ]
+  },
+  "Remove Shortcut": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Replace": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Replace “\\(url.lastPathComponent)”?": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Restore Default (\\(action.defaults.map(\\.display).joined(separator: ": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Restore Defaults": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Reverse": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Ripple Delete": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Ripple Trim End to Playhead": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Ripple Trim Start to Playhead": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Saturate": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Save": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Save As…": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Save changes to “\\(title)”?": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Saving": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Scale": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Search": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Search fonts": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Search shortcuts": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Set In": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Set Out": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Settings": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Shadows": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Show Magic at work": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Show in Finder": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Sign In": {
+   "mac": [
+    "Magic/MagicAgent.swift"
+   ]
+  },
+  "Sign in to \\(kind.name)": {
+   "mac": [
+    "Magic/MagicAgent.swift"
+   ]
+  },
+  "Size": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Skim": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Skimming": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Skip This Version": {
+   "mac": [
+    "App/UpdateDriver.swift"
+   ]
+  },
+  "Snap": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Snapping": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Software Update": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Solid": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Speed": {
+   "mac": [
+    "UI/InspectorView.swift",
+    "UI/TimelineCanvas.swift"
+   ]
+  },
+  "Split": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Split at Playhead": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Sticky": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Sticky Edges": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Stop": {
+   "mac": [
+    "UI/ContentView.swift"
+   ]
+  },
+  "Strip": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Style": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Temp": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Text": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "That file is over 200 MB, too big for a music track.": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "That file isn't audio Editroom can play. Find the direct link to an .mp3 or .wav.": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "That link is a web page, not an audio file. Find the direct link to the file (it usually ends in .mp3 or .wav).": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "The Claude app isn't on this Mac.": {
+   "mac": [
+    "MCP/AgentConnect.swift"
+   ]
+  },
+  "The download was empty.": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "The folder “\\(f.name)” is missing": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "The site answered \\(http.statusCode); that link didn't give a file.": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "Theme": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "There's no audio on the timeline to level.": {
+   "mac": [
+    "Magic/LocalImprover.swift"
+   ]
+  },
+  "This build doesn't check for updates.": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Tint": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Track level — drag, or click to type": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "Transform": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Transition In": {
+   "mac": [
+    "UI/TimelineCanvas.swift"
+   ]
+  },
+  "Transition Out": {
+   "mac": [
+    "UI/TimelineCanvas.swift"
+   ]
+  },
+  "Transitions": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Try Again": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "Undo": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Use an https link to the audio file.": {
+   "mac": [
+    "MCP/MediaDownload.swift"
+   ]
+  },
+  "Video": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "View": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "View GitHub Releases": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "View as": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "Viewer zoom": {
+   "mac": [
+    "UI/PreviewView.swift"
+   ]
+  },
+  "Volume": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "WAV Audio": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Web": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Which \\(kind.name) model makes the edit": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "Whole timeline": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "Working now:": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "X": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Y": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "Your audio clips are already at the same level.": {
+   "mac": [
+    "Magic/LocalImprover.swift"
+   ]
+  },
+  "Your changes to “\\(title)” will be lost.": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Your changes will be lost if you don't save them.": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "Zoom In": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Zoom Out": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Zoom to Fit": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "\\(Int((s * 100).rounded()))%": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "\\(asset.width) × \\(asset.height) · \\(InspectorView.fpsLabel(fps))\\nThe sequence is currently \\(project.width) × \\(project.height) · \\(InspectorView.fpsLabel(project.fps)).": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "\\(clipCount) clip\\(clipCount == 1 ? ": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "\\(kind.name) is connected": {
+   "mac": [
+    "UI/MagicPopover.swift"
+   ]
+  },
+  "\\(n) item\\(n == 1 ? ": {
+   "mac": [
+    "Model/EditorModel.swift"
+   ]
+  },
+  "\\(p.width) × \\(p.height)": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "\\(tree.count(under: folder))": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "after ": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "after the marked range": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "at ": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "at the end": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "at the marker": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "at the playhead": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "at the start": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "before ": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "before the marked range": {
+   "mac": [
+    "Magic/LocalAdd.swift"
+   ]
+  },
+  "editroom.audio-stream": {
+   "mac": [
+    "Engine/AudioStream.swift"
+   ]
+  },
+  "editroom.compositor": {
+   "mac": [
+    "Engine/TimelineCompositor.swift"
+   ]
+  },
+  "editroom.export.\\(index)": {
+   "mac": [
+    "Engine/Exporter.swift"
+   ]
+  },
+  "editroom.grab": {
+   "mac": [
+    "Engine/SourceColor.swift"
+   ]
+  },
+  "editroom.reading": {
+   "mac": [
+    "Engine/ReadGuard.swift"
+   ]
+  },
+  "editroom.reverse": {
+   "mac": [
+    "Engine/Reverser.swift"
+   ]
+  },
+  "editroom.scrub": {
+   "mac": [
+    "Engine/PlaybackEngine.swift"
+   ]
+  },
+  "· ": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  },
+  "×": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "“": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "“\\(folder.name)” can't be found": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
+  "↳  While skimming, play from": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
+  "✕": {
+   "mac": [
+    "UI/TimelinePanel.swift"
+   ]
+  }
+ }
+}

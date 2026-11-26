@@ -1,0 +1,1325 @@
+{
+ "instructions": "Editroom is a video editor. Times are in seconds. Video tracks are V1, V2, … (V1 is the bottom; higher tracks cover lower ones) and audio tracks are A1, A2, …. A video with sound is placed as a linked pair: moving, trimming or deleting either moves both. Placing, moving or trimming a clip over another on the same track overwrites what's underneath, as on the timeline. Start with get_project and list_media; analyze_media finds a clip's best moments or a song's beats; look_at_media shows you a clip or photo, and get_frame shows you the cut; search_media finds shots by what they show or what's said. After looking at a clip, save what you saw with note_media; list_media gives those notes back next time, so trust a clip's notes and look again only for an exact frame. Each edit is shown to the person with your own cursor and can be undone with history. auto_edit builds a whole cut on its own, and export delivers it to a file (vertical, square or portrait too, at a loudness target).",
+ "tools": [
+  {
+   "name": "get_project",
+   "title": "Get project",
+   "description": "The sequence (size, frame rate, length), tracks, and every clip with its id, track, times, source, grade, sound and transition.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "list_media",
+   "title": "List media",
+   "description": "Everything in the library: id, name, kind (video, audio, image), the folder it's in, length, size, frame rate, what it shows, whether people talk in it, and notes saved from looking at it before.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "import_media",
+   "title": "Import media",
+   "description": "Adds files to the library. A folder brings in everything in it (and in folders inside it) and stays linked: files added to it later come in too, and list_media gives each item's folder.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "paths": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Absolute paths of files or folders."
+     }
+    },
+    "required": [
+     "paths"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "download_media",
+   "title": "Download media",
+   "description": "Downloads one music or sound file you found online and adds it to the library, ready for add_clip. Give the direct link to the audio file (an .mp3, .m4a or .wav), not a web page. Only for music that's free to use; say where you found it and what its licence allows, which is noted beside the file.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string",
+      "description": "https link to the audio file itself."
+     },
+     "name": {
+      "type": "string",
+      "description": "What to call it, like the track and artist."
+     },
+     "source_page": {
+      "type": "string",
+      "description": "The page you found it on."
+     },
+     "licence": {
+      "type": "string",
+      "description": "What the licence says, for example \"Pixabay Content License: free to use, no attribution required\"."
+     }
+    },
+    "required": [
+     "url",
+     "source_page",
+     "licence"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "analyze_media",
+   "title": "Analyze media",
+   "description": "For a video or photo: its best moments, scored for focus, exposure, colour, faces and steadiness. For music: tempo, beats and where bars start. Done on this Mac; cached.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "asset_id": {
+      "type": "string",
+      "description": "A library item's id."
+     },
+     "moment_length": {
+      "type": "number",
+      "description": "Length of moments to look for, in seconds (default 2)."
+     }
+    },
+    "required": [
+     "asset_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "get_transcript",
+   "title": "Get transcript",
+   "description": "What's said in a video or sound file, heard on this Mac: its sentences and pauses with their times in the file (and each word's time if you ask). Use it for anything with people talking: to cut pauses, retakes and filler, keep sentences whole, find a moment by what's said, or put pictures over the talking. Made in the background after import; cached.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "asset_id": {
+      "type": "string",
+      "description": "A library item's id."
+     },
+     "words": {
+      "type": "boolean",
+      "description": "Also every word with its start and end (default false)."
+     }
+    },
+    "required": [
+     "asset_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "look_at_media",
+   "title": "Look at media",
+   "description": "Shows you a library item: a photo, or frames from across a video in a grid, each marked with its time in the file. Use it to see what's in each shot before choosing.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "asset_id": {
+      "type": "string",
+      "description": "A library item's id."
+     },
+     "frames": {
+      "type": "integer",
+      "description": "How many frames from across a video (default 6, at most 12)."
+     },
+     "times": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      },
+      "description": "Or exactly which times in the file to show, in seconds (at most 12)."
+     }
+    },
+    "required": [
+     "asset_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "note_media",
+   "title": "Note what's in media",
+   "description": "Saves what you saw in a library item after looking at it, for later edits: what happens and where (times in the file), the people, the place, the light, how steady, and its best and weakest moments. Two or three short lines. list_media hands it back as \"notes\", so it needn't be looked at again. Replaces any note it had; kept on this Mac, never in the project.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "asset_id": {
+      "type": "string",
+      "description": "A library item's id."
+     },
+     "notes": {
+      "type": "string",
+      "description": "What's in it, with times, like \"0-3s girl in a high chair eating noodles; 3-8s close-up, laughing at the camera, best moment 5s; bright kitchen, handheld but steady.\""
+     }
+    },
+    "required": [
+     "asset_id",
+     "notes"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "get_frame",
+   "title": "Get frame",
+   "description": "A picture of the cut at a time (default: the playhead), 640 pixels on its longer side.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "time": {
+      "type": "number",
+      "description": "Seconds."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "add_clip",
+   "title": "Add clip",
+   "description": "Drags a library item onto the timeline. A video with sound brings its audio, linked.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "asset_id": {
+      "type": "string",
+      "description": "A library item's id."
+     },
+     "start": {
+      "type": "number",
+      "description": "Where on the timeline (default: the end of the track)."
+     },
+     "track": {
+      "type": "string",
+      "description": "V1, V2… for video and photos; A1, A2… for audio (default V1 or A1)."
+     },
+     "source_start": {
+      "type": "number",
+      "description": "Where in the file to start (default 0)."
+     },
+     "duration": {
+      "type": "number",
+      "description": "How long (default: the rest of the file; 5 for a photo)."
+     }
+    },
+    "required": [
+     "asset_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "add_title",
+   "title": "Add title",
+   "description": "Adds a text title, typed in.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "text": {
+      "type": "string",
+      "description": "The words."
+     },
+     "start": {
+      "type": "number",
+      "description": "Default 0."
+     },
+     "duration": {
+      "type": "number",
+      "description": "Default 3."
+     },
+     "track": {
+      "type": "string",
+      "description": "A video track (default: one that's free there, above V1)."
+     }
+    },
+    "required": [
+     "text"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "move_clip",
+   "title": "Move clip",
+   "description": "Moves a clip (and anything linked to it) in time, and optionally to another track of the same kind.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "start": {
+      "type": "number",
+      "description": "New start."
+     },
+     "track": {
+      "type": "string",
+      "description": "Optional new track."
+     }
+    },
+    "required": [
+     "clip_id",
+     "start"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "trim_clip",
+   "title": "Trim clip",
+   "description": "Moves a clip's start and/or end edge on the timeline (and its linked clip's). The source moves with the start edge.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "start": {
+      "type": "number",
+      "description": "New start edge."
+     },
+     "end": {
+      "type": "number",
+      "description": "New end edge."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_speed",
+   "title": "Set speed",
+   "description": "Speeds a clip (and its linked sound) up or slows it down, keeping the same part of the file: 4 plays four times as fast and a quarter as long (a timelapse), 0.5 is slow motion. Clips after it on the track move to stay butted up.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "speed": {
+      "type": "number",
+      "description": "0.05...100; 1 is normal."
+     }
+    },
+    "required": [
+     "clip_id",
+     "speed"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_speed_ramp",
+   "title": "Set speed ramp",
+   "description": "A speed ramp on a clip (and its linked sound): it plays at `around` speed, eases into `speed` for the part of the file from `from` to `to`, then eases back. For a slow-motion moment (speed 0.25, around 1), fast-normal-fast B-roll (speed 1, around 4), or ramping into a cut (`to` left out, `speed` 4: it eases up toward the clip's end). Times are seconds in the file, like source_start. The clip's length changes; clips after it on the track move to stay butted up. remove: true takes a clip's ramp away.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "speed": {
+      "type": "number",
+      "description": "The speed from `from` to `to`, 0.05...100 (1 is normal)."
+     },
+     "from": {
+      "type": "number",
+      "description": "Seconds in the file where it reaches `speed` (default: the clip's start, so no ease in)."
+     },
+     "to": {
+      "type": "number",
+      "description": "Seconds in the file where it starts easing back (default: the clip's end, so no ease out)."
+     },
+     "ease": {
+      "type": "number",
+      "description": "Seconds of the file each ease takes (default 0.4)."
+     },
+     "around": {
+      "type": "number",
+      "description": "The speed before and after (default 1)."
+     },
+     "remove": {
+      "type": "boolean",
+      "description": "Take the clip's ramp away (its speed stays)."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_captions",
+   "title": "Set captions",
+   "description": "Captions from what's said: a caption track above the video shows the words of each captioned clip in short phrases, timed to the speech, and follows every trim and move of those clips. Give clip_ids to caption those clips' speech (a video's sound is its linked audio clip); with none, every clip of people talking is captioned (sound from video files and voiceover tracks, not music). Also sets the captions' style, and with edit fixes captions: a misheard word, a name spelled right, or a caption taken out. remove: true takes captions off clip_ids, or removes the caption track with none. Returns the captions.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Clips whose speech to caption (or un-caption with remove)."
+     },
+     "remove": {
+      "type": "boolean",
+      "description": "Take captions off instead."
+     },
+     "size": {
+      "type": "number",
+      "description": "Text size, 28...140 (default 64)."
+     },
+     "position": {
+      "type": "number",
+      "description": "Where they sit, 0.1 (top) to 0.95 (bottom) of the frame (default 0.78)."
+     },
+     "highlight": {
+      "type": "boolean",
+      "description": "Light up each word as it's said (default true)."
+     },
+     "hidden": {
+      "type": "boolean",
+      "description": "Hide or show the caption track (hidden captions aren't exported)."
+     },
+     "edit": {
+      "type": "array",
+      "description": "Captions to change, each found by a timeline time inside it (as set_captions or get_project return them): the words it should say, or \"\" to take it out. The caption keeps its time.",
+      "items": {
+       "type": "object",
+       "properties": {
+        "at": {
+         "type": "number",
+         "description": "Timeline seconds inside the caption."
+        },
+        "text": {
+         "type": "string",
+         "description": "What it should say."
+        }
+       },
+       "required": [
+        "at",
+        "text"
+       ]
+      }
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "split_clip",
+   "title": "Split clip",
+   "description": "Cuts a clip (and its linked clip) in two with the blade. Returns the new right-hand pieces.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "at": {
+      "type": "number",
+      "description": "Timeline time inside the clip."
+     }
+    },
+    "required": [
+     "clip_id",
+     "at"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "delete_clips",
+   "title": "Delete clips",
+   "description": "Deletes clips and anything linked to them.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "ripple": {
+      "type": "boolean",
+      "description": "Close the gap left behind (default false)."
+     }
+    },
+    "required": [
+     "clip_ids"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_grade",
+   "title": "Set grade",
+   "description": "Colour for video, photo and title clips. Leave out what shouldn't change.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "look": {
+      "type": "string",
+      "description": "A look from list_looks, a .cube file path, or \"none\"."
+     },
+     "look_intensity": {
+      "type": "number",
+      "description": "0...1."
+     },
+     "exposure": {
+      "type": "number",
+      "description": "Stops, -2...2."
+     },
+     "contrast": {
+      "type": "number",
+      "description": "-50...50."
+     },
+     "saturation": {
+      "type": "number",
+      "description": "-100...100."
+     },
+     "temperature": {
+      "type": "number",
+      "description": "-50...50, negative is cooler."
+     },
+     "tint": {
+      "type": "number",
+      "description": "-50...50, positive is toward magenta."
+     }
+    },
+    "required": [
+     "clip_ids"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "list_looks",
+   "title": "List looks",
+   "description": "The built-in looks for set_grade.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_audio",
+   "title": "Set level and fades",
+   "description": "A clip's sound level, and its fades: a sound clip's fade its sound, a video, photo, title or solid's fade its picture (in from black, out to black).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "gain_db": {
+      "type": "number",
+      "description": "Sound level in dB, -60...12."
+     },
+     "fade_in": {
+      "type": "number",
+      "description": "Seconds."
+     },
+     "fade_out": {
+      "type": "number",
+      "description": "Seconds."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_transition",
+   "title": "Set transition",
+   "description": "A transition into a clip from the clip that ends where it starts on the same track.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "The later clip's id."
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "dissolve",
+       "dipToBlack",
+       "wipe",
+       "none"
+      ]
+     },
+     "duration": {
+      "type": "number",
+      "description": "Seconds (default 0.5)."
+     }
+    },
+    "required": [
+     "clip_id",
+     "kind"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "add_track",
+   "title": "Add track",
+   "description": "Adds an empty track on top of the others of its kind.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "kind": {
+      "type": "string",
+      "enum": [
+       "video",
+       "audio"
+      ]
+     }
+    },
+    "required": [
+     "kind"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_sequence",
+   "title": "Set sequence",
+   "description": "The frame size and frame rate of the cut.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "width": {
+      "type": "integer"
+     },
+     "height": {
+      "type": "integer"
+     },
+     "fps": {
+      "type": "number",
+      "description": "23.976, 24, 25, 29.97, 30, 50, 59.94, 60, 100, 119.88 or 120."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "playback",
+   "title": "Playback",
+   "description": "Play, pause or move the playhead.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "play",
+       "pause",
+       "seek"
+      ]
+     },
+     "time": {
+      "type": "number",
+      "description": "For seek."
+     }
+    },
+    "required": [
+     "action"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "history",
+   "title": "Undo or redo",
+   "description": "Undoes or redoes the last change (each tool call is one change).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "undo",
+       "redo"
+      ]
+     }
+    },
+    "required": [
+     "action"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "auto_edit",
+   "title": "Auto edit",
+   "description": "Builds a whole cut from the library on its own: best moments, cut to the beat of a song if there is one, titled. Replaces what's on the timeline (one undo brings it back).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "save_project",
+   "title": "Save project",
+   "description": "Saves the project to its file. A project that's never been saved has to be saved by the person.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "export",
+   "title": "Export",
+   "description": "Exports the cut to a file, in the background (export_status says how it's going, or set wait). Saved in the folder the person last exported to (else beside the project, else Movies); never over an existing file. Not available while making a Magic edit.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "File name, without extension (default: the project's)."
+     },
+     "format": {
+      "type": "string",
+      "enum": [
+       "video",
+       "audio"
+      ],
+      "description": "An MP4, or a WAV of the sound (default video)."
+     },
+     "shape": {
+      "type": "string",
+      "enum": [
+       "original",
+       "vertical",
+       "square",
+       "portrait"
+      ],
+      "description": "original is the sequence's own shape; vertical 9:16, square 1:1 and portrait 4:5 crop it."
+     },
+     "height": {
+      "type": "integer",
+      "description": "Output height in pixels (for vertical, square and portrait: the short side), e.g. 720, 1080, 2160. Default: the sequence's."
+     },
+     "codec": {
+      "type": "string",
+      "enum": [
+       "h264",
+       "hevc"
+      ]
+     },
+     "quality": {
+      "type": "string",
+      "enum": [
+       "high",
+       "web"
+      ]
+     },
+     "include_audio": {
+      "type": "boolean",
+      "description": "Default true."
+     },
+     "loudness": {
+      "type": "number",
+      "description": "Target loudness in LUFS: -14 for YouTube and social, -16 for podcasts, -23 for broadcast. Leave out to keep the levels."
+     },
+     "range_only": {
+      "type": "boolean",
+      "description": "Just the in/out range (see set_in_out)."
+     },
+     "reframe_x": {
+      "type": "number",
+      "description": "For a crop: which part to keep, 0 (left) to 1 (right). Default 0.5."
+     },
+     "reframe_y": {
+      "type": "number",
+      "description": "For a crop: 0 (top) to 1 (bottom). Default 0.5."
+     },
+     "wait": {
+      "type": "boolean",
+      "description": "Wait until it's done (up to about 4 minutes) instead of returning straight away."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "export_status",
+   "title": "Export status",
+   "description": "Exports started from Editroom (by anyone): their files and whether they're waiting, running, done or failed.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "search_media",
+   "title": "Search media",
+   "description": "Finds library items by what they show (people, places, things: \"beach\", \"dog\", \"car at night\") and/or what's said in them, with the times in each file. Much quicker than looking at or transcribing each one. Seen and heard on this Mac in the background after import, so a new file may not be searchable yet.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "shows": {
+      "type": "string",
+      "description": "Words for what's in the shot; every word has to match."
+     },
+     "said": {
+      "type": "string",
+      "description": "Words someone says, in order."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_marker",
+   "title": "Set marker",
+   "description": "Adds a marker on the timeline, or changes one (give marker_id, from get_project). Use markers when asked to mark moments (beats, highlights, places to cut).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "marker_id": {
+      "type": "string",
+      "description": "To change an existing marker."
+     },
+     "time": {
+      "type": "number",
+      "description": "Timeline seconds (needed for a new marker)."
+     },
+     "name": {
+      "type": "string",
+      "description": "What to call it."
+     },
+     "color": {
+      "type": "string",
+      "enum": [
+       "white",
+       "yellow",
+       "green",
+       "blue",
+       "purple",
+       "red"
+      ]
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "delete_markers",
+   "title": "Delete markers",
+   "description": "Removes markers.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "marker_ids": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "all": {
+      "type": "boolean",
+      "description": "Remove every marker."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_in_out",
+   "title": "Set in and out",
+   "description": "The in/out range: what Loop plays and what export can be limited to (range_only).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "in": {
+      "type": "number",
+      "description": "Timeline seconds."
+     },
+     "out": {
+      "type": "number",
+      "description": "Timeline seconds."
+     },
+     "clear": {
+      "type": "boolean",
+      "description": "Remove the range."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_transform",
+   "title": "Position and scale",
+   "description": "Moves and scales a video, photo or solid in the frame, for reframing (keeping a subject in a vertical crop, a picture-in-picture). A title's place is set with set_title_style.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "scale": {
+      "type": "number",
+      "description": "1 fits the frame; 2 is twice as big (0.05...10)."
+     },
+     "x": {
+      "type": "number",
+      "description": "Offset of its centre across, as a fraction of the frame's width (0 is centred, 0.5 is the right edge)."
+     },
+     "y": {
+      "type": "number",
+      "description": "Offset down, as a fraction of the frame's height (0 is centred, positive is lower)."
+     },
+     "reset": {
+      "type": "boolean",
+      "description": "Back to fitted and centred."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_title_style",
+   "title": "Title style",
+   "description": "A title's words and look. Leave out what shouldn't change.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A title clip's id."
+     },
+     "text": {
+      "type": "string",
+      "description": "The words."
+     },
+     "font": {
+      "type": "string",
+      "description": "A font family installed on this Mac, or \"System\"."
+     },
+     "size": {
+      "type": "number",
+      "description": "Points, for a 1080-pixel-tall frame (12...600; default 110)."
+     },
+     "bold": {
+      "type": "boolean"
+     },
+     "color": {
+      "type": "string",
+      "description": "Hex, like #FFFFFF."
+     },
+     "x": {
+      "type": "number",
+      "description": "Its centre across, 0 (left) to 1 (right)."
+     },
+     "y": {
+      "type": "number",
+      "description": "Its centre down, 0 (top) to 1 (bottom)."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "freeze_frame",
+   "title": "Freeze frame",
+   "description": "Holds one frame of a video clip: the clip is cut there, the held frame goes in, and what follows on its tracks moves along to make room.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A video clip's id."
+     },
+     "at": {
+      "type": "number",
+      "description": "Timeline time inside the clip (default: its middle)."
+     },
+     "seconds": {
+      "type": "number",
+      "description": "How long to hold (default 2)."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "reverse_clip",
+   "title": "Reverse",
+   "description": "Plays a clip (and its linked sound) backwards; again plays it forwards.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "detach_audio",
+   "title": "Detach audio",
+   "description": "Unlinks a video from its sound, so each can be moved, trimmed or deleted on its own.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "The video's or its sound's id."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "duplicate_clip",
+   "title": "Duplicate clip",
+   "description": "Copies a clip (and anything linked to it) to another time.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A clip's id."
+     },
+     "start": {
+      "type": "number",
+      "description": "Where the copy starts (default: straight after the clip)."
+     }
+    },
+    "required": [
+     "clip_id"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_track",
+   "title": "Set track",
+   "description": "A track's switches and level.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "track": {
+      "type": "string",
+      "description": "V1, V2… or A1, A2…"
+     },
+     "hidden": {
+      "type": "boolean",
+      "description": "Video tracks."
+     },
+     "muted": {
+      "type": "boolean",
+      "description": "Audio tracks."
+     },
+     "solo": {
+      "type": "boolean",
+      "description": "Audio tracks."
+     },
+     "locked": {
+      "type": "boolean"
+     },
+     "gain_db": {
+      "type": "number",
+      "description": "Audio tracks, -60...12."
+     }
+    },
+    "required": [
+     "track"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "add_solid",
+   "title": "Add solid",
+   "description": "Adds a solid colour (a background, a flash, a colour card).",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "color": {
+      "type": "string",
+      "description": "Hex, like #000000 (default black)."
+     },
+     "start": {
+      "type": "number",
+      "description": "Default 0."
+     },
+     "duration": {
+      "type": "number",
+      "description": "Default 3."
+     },
+     "track": {
+      "type": "string",
+      "description": "A video track (default: one that's free there)."
+     }
+    },
+    "required": []
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  },
+  {
+   "name": "set_solid_color",
+   "title": "Solid colour",
+   "description": "Changes a solid's colour.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "clip_id": {
+      "type": "string",
+      "description": "A solid's id."
+     },
+     "color": {
+      "type": "string",
+      "description": "Hex, like #1A1A1A."
+     }
+    },
+    "required": [
+     "clip_id",
+     "color"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "openWorldHint": false
+   }
+  }
+ ]
+}

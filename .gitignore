@@ -1,0 +1,22 @@
+# Build output and local caches
+build/
+.cache/
+compile_commands.json
+*.AppImage
+
+# Large local media for benchmarks (see docs/bench/)
+bench-media/
+
+# Downloads, unpacked sources and locally built tools (not needed to build: see README › Build)
+third_party/_dl/
+third_party/src/
+third_party/tools/
+third_party/libva/
+
+# Parts of whisper.cpp the build doesn't use (examples, tests and bindings are off)
+third_party/whisper.cpp/examples/
+third_party/whisper.cpp/bindings/
+third_party/whisper.cpp/samples/
+third_party/whisper.cpp/tests/
+third_party/whisper.cpp/models/*.bin
+third_party/whisper.cpp/ci/

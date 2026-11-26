@@ -1,0 +1,15 @@
+#!/bin/sh
+# A stand-in for Claude Code in tests: reads the brief, finds the MCP URL in --mcp-config, adds a title
+# through the draft endpoint, and reports in stream-json. Nothing leaves this computer.
+config=""
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--mcp-config" ]; then config="$2"; shift; fi
+  shift
+done
+cat > /dev/null
+url=$(printf '%s' "$config" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+call() { curl -s -X POST -H 'Content-Type: application/json' -H 'Host: 127.0.0.1' --data "$1" "$url" > /dev/null; }
+call '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"claude-code"}}}'
+call '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_title","arguments":{"text":"From the fake agent","start":0,"duration":2}}}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Added a title."}]}}'
+echo '{"type":"result","subtype":"success","is_error":false,"result":"I added a title at the start."}'
