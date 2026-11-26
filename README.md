@@ -144,7 +144,7 @@ Editroom LX is MIT-licensed. FFmpeg is linked dynamically (LGPL); the third-part
 ## Credits
 
 Editroom LX is a port of [Editroom](https://github.com/robbietilton/Editroom), the open-source video editor for
-the Mac by [Robbie Tilton](https://github.com/robbietilton) and Wonder Assembly LLC, released under the MIT
+the Mac by [@robbietilton](https://github.com/robbietilton) (Wonder Assembly LLC), released under the MIT
 licence. Its design, features, Magic and the `.room` project format all come from the Mac app; this port
 recreates them for Linux. Thank you to the Editroom authors for making it open source.
 
