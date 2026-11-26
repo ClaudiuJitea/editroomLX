@@ -13,6 +13,7 @@
 #include <QPainter>
 #include <QPointer>
 #include <QPainterPath>
+#include <QFileInfo>
 #include <QUrl>
 #include <chrono>
 #include <cmath>
@@ -739,17 +740,36 @@ void TimelineCanvas::updateMove(const Clip& grabbed, double startTime, const std
     }
 
     // Linked partners on the other kind of track move the same number of tracks, so a clip taken from V1 to V2
-    // has its sound go from A1 to A2 (and back), but only into space that's free: with other sound already
-    // there, the sound stays on its own track rather than writing over it.
+    // has its sound go from A1 to A2 (and back), when they're on matching tracks to start with, but only into
+    // space that's free: with other sound already there (music on A2), the sound stays on its own track rather
+    // than writing over it.
     std::set<Uuid> movedLinks;
     for (const auto& c : originals) if (trackKindOf(c.kind) == kind && c.linkID) movedLinks.insert(*c.linkID);
     const TrackKind otherKind = kind == TrackKind::video ? TrackKind::audio : TrackKind::video;
     const auto& otherTracks = project.tracks(otherKind);
+    // What the dragged clips land on: a picture taken onto V1 over a clip there may take its sound onto A1 over that
+    // same clip's sound (one drag, as Premiere does); sound that isn't theirs (music) still holds it back.
+    std::set<Uuid> overwritten;
+    for (const auto& c : originals) {
+        if (trackKindOf(c.kind) != kind) continue;
+        const auto i = project.trackIndex(c.trackID, kind);
+        if (!i) continue;
+        const int ni = int(*i) + moveTrackDelta_;
+        if (ni < 0 || ni >= int(tracks.size())) continue;
+        const double start = std::max(0.0, c.start + dt), end = start + c.duration;
+        for (const auto& o : project.clips)
+            if (o.trackID == tracks[size_t(ni)].id && !ids.count(o.id) && o.start < end - 1e-6 && o.end() > start + 1e-6 && o.linkID) overwritten.insert(*o.linkID);
+    }
     auto taken = [&](const Uuid& track, double start, double end) {
         for (const auto& o : project.clips)
-            if (o.trackID == track && !ids.count(o.id) && o.start < end - 1e-6 && o.end() > start + 1e-6) return true;
+            if (o.trackID == track && !ids.count(o.id) && o.start < end - 1e-6 && o.end() > start + 1e-6 && !(o.linkID && overwritten.count(*o.linkID))) return true;
         return false;
     };
+    // Where each dragged clip's track is (V1 = 0), by link: its partner follows only from the matching track (A1
+    // with V1), keeping them matched. On another track (a picture on V2 with its sound on A1), it stays put.
+    std::map<Uuid, int> draggedTrack;
+    for (const auto& c : originals)
+        if (trackKindOf(c.kind) == kind && c.linkID) if (auto i = project.trackIndex(c.trackID, kind)) draggedTrack[*c.linkID] = int(*i);
     std::map<Uuid, Clip> out;
     for (Clip c : originals) {
         c.start = std::max(0.0, c.start + dt);
@@ -760,7 +780,7 @@ void TimelineCanvas::updateMove(const Clip& grabbed, double startTime, const std
                                                      : tracks[size_t(std::max(0, ni))].id;
             }
         } else if (trackKindOf(c.kind) == otherKind && c.linkID && movedLinks.count(*c.linkID)) {
-            if (auto i = project.trackIndex(c.trackID, otherKind)) {
+            if (auto i = project.trackIndex(c.trackID, otherKind); i && draggedTrack.count(*c.linkID) && draggedTrack[*c.linkID] == int(*i)) {
                 const int ni = std::max(0, int(*i) + moveTrackDelta_);
                 if (ni >= int(otherTracks.size())) {
                     c.trackID = otherKind == TrackKind::video ? TrackToken::newVideo() : TrackToken::newAudio();
@@ -993,6 +1013,7 @@ void TimelineCanvas::contextMenuEvent(QContextMenuEvent* e) {
         const double t = m.playhead();
         add(&menu, QStringLiteral("Split at Playhead"), [&m] { m.splitAtPlayhead(); }, t > clip.start && t < clip.end());
         add(&menu, QStringLiteral("Detach Audio"), [&m] { m.detachAudio(); }, m.selectionIsLinked());
+        add(&menu, QStringLiteral("Reveal in Media"), [&m, id = clip.id] { m.revealInMedia(id); }, clip.assetID && m.project().asset(clip.assetID));
         if (usesSource(clip.kind)) {
             add(&menu, QStringLiteral("Freeze Frame at Playhead"), [&m] { m.freezeFrame(); },
                 clip.kind == ClipKind::video && !clip.isFreeze() && t >= clip.start && t < clip.end());
@@ -1142,7 +1163,8 @@ bool TimelineCanvas::updateDrop(const QMimeData* mime, QPointF p) {
     aTrack = open(aTrack, TrackKind::audio);
     double duration = items.empty() ? 5 : 0;
     for (const auto& it : items) duration += m.payloadDuration(it);
-    double start = std::max(0.0, time(p.x()));
+    // Over the track headers (left of the first frame): the very start of the timeline, on the row it's over.
+    double start = p.x() < 0 ? 0.0 : std::max(0.0, time(p.x()));
     auto targets = project.snapTargets({});
     targets.push_back(m.playhead());
     if (auto s = snap({start, start + duration}, targets); s && start + s->first >= -1e-9) {
@@ -1161,6 +1183,13 @@ bool TimelineCanvas::updateDrop(const QMimeData* mime, QPointF p) {
         }
     } else {
         ghosts_.push_back(Clip(overAudio ? aTrack : vTrack, overAudio ? ClipKind::audio : ClipKind::video, start, duration));
+        QStringList files;
+        for (const QUrl& u : mime->urls()) if (u.isLocalFile()) files << u.toLocalFile();
+        fileGhostLabel_.reset();
+        if (!files.isEmpty()) {
+            const QString name = QFileInfo(files.first()).completeBaseName();
+            fileGhostLabel_ = files.size() > 1 ? QStringLiteral("%1 + %2 more").arg(name).arg(files.size() - 1) : name;
+        }
     }
     dropInfo_ = DropInfo{vTrack, aTrack, start};
     update();
@@ -1169,6 +1198,7 @@ bool TimelineCanvas::updateDrop(const QMimeData* mime, QPointF p) {
 
 void TimelineCanvas::clearDrop() {
     ghosts_.clear();
+    fileGhostLabel_.reset();
     dropInfo_.reset();
     snapLine_.reset();
     update();
@@ -1202,13 +1232,19 @@ void TimelineCanvas::dropEvent(QDropEvent* e) {
                 for (const auto& c : m.makeClips(payload, t, info.video, info.audio)) clips.push_back(c);
                 t += m.payloadDuration(payload);
             }
-            if (!clips.empty()) m.insert(clips);
+            if (!clips.empty()) {
+                m.insert(clips);
+                // Only the new timeline clips are picked, so Delete takes them off the timeline, not out of Media.
+                m.clearMediaPicks();
+            }
         });
         e->acceptProposedAction();
         return;
     }
     if (pending.empty()) return;
     m.insert(pending);
+    // Only the new timeline clips are picked, so Delete takes them off the timeline, not out of Media.
+    m.clearMediaPicks();
     setFocus();
     e->acceptProposedAction();
 }
@@ -1619,7 +1655,9 @@ void TimelineCanvas::drawClip(QPainter& ctx, const Clip& c, double alpha) {
     // Title strip
     if (r.width() > 26 && r.height() > 20) {
         if (thumbs && (c.kind == ClipKind::video || c.kind == ClipKind::image)) ctx.fillRect(QRectF(r.left(), r.top(), r.width(), 17), black(0.45));
-        QString label = m.project().name(c);
+        // Files being dropped have no library item yet: their outline shows the file's name, not "Missing".
+        const bool fileGhost = !c.assetID && usesSource(c.kind) && std::any_of(ghosts_.begin(), ghosts_.end(), [&](const Clip& g) { return g.id == c.id; });
+        QString label = fileGhost ? fileGhostLabel_.value_or(QString()) : m.project().name(c);
         if (c.isFreeze()) label += QStringLiteral("   Freeze");
         else if (std::abs(c.speed - 1) > 0.001) label += QStringLiteral("   %1%").arg(int(std::round(c.speed * 100)));
         if (c.isReversed()) label += QStringLiteral("   Reversed");

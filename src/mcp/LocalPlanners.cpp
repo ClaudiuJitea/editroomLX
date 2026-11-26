@@ -1,6 +1,7 @@
 #include "LocalPlanners.h"
 #include "LocalImprover.h"
 #include "model/Captions.h"
+#include <QRegularExpression>
 #include <algorithm>
 #include <cmath>
 
@@ -496,6 +497,93 @@ LocalOutcome plan(const QString& request, const MagicPointers& ptr, const Projec
 }
 
 } // namespace LocalRamp
+
+// MARK: LocalZoom
+
+namespace LocalZoom {
+
+bool asks(const QString& request) {
+    return any(request.toLower(), {"zoom", "push in", "punch in", "push-in", "punch-in", "ken burns"});
+}
+
+namespace {
+/// How far in, when it's said: "2x", "1.5×", "150%".
+std::optional<double> zoomScale(const QString& t) {
+    static const QRegularExpression times(QStringLiteral(R"((\d+(\.\d+)?)\s*[x×])"));
+    static const QRegularExpression percent(QStringLiteral(R"((\d+)\s*%)"));
+    if (const auto m = times.match(t); m.hasMatch()) {
+        bool ok = false;
+        const double v = m.captured(1).toDouble(&ok);
+        if (ok && v > 1 && v <= 10) return v;
+    }
+    if (const auto m = percent.match(t); m.hasMatch()) {
+        bool ok = false;
+        const double v = m.captured(1).toDouble(&ok);
+        if (ok && v > 100 && v <= 1000) return v / 100;
+    }
+    return std::nullopt;
+}
+} // namespace
+
+LocalOutcome plan(const QString& request, const MagicPointers& ptr, const Project& p) {
+    const QString t = QLatin1Char(' ') + request.toLower() + QLatin1Char(' ');
+    const auto found = MagicMention::find(request, p.assets, MagicMention::clipLabels(p));
+    IdSet pointed;
+    bool selectedMention = false;
+    for (const auto& f : found) {
+        if (f.mention.kind == MagicMention::Kind::clip) pointed.insert(f.mention.id);
+        if (f.mention.kind == MagicMention::Kind::selected) selectedMention = true;
+    }
+    if (selectedMention || t.contains(QLatin1String("selected")) || pointed.empty()) pointed.insert(ptr.selected.begin(), ptr.selected.end());
+    std::vector<Clip> targets;
+    for (const auto& c : p.clips) if (pointed.count(c.id) && c.isTransformable() && !p.isLocked(c.trackID)) targets.push_back(c);
+    if (targets.empty()) {
+        // The picture under the playhead: the top video track that has one there.
+        for (auto tr = p.videoTracks.rbegin(); tr != p.videoTracks.rend() && targets.empty(); ++tr)
+            for (const auto& c : p.clips)
+                if (c.trackID == tr->id && c.isTransformable() && !p.isLocked(c.trackID) && ptr.playhead >= c.start && ptr.playhead < c.end()) {
+                    targets = {c};
+                    break;
+                }
+    }
+    if (targets.empty()) return said(QStringLiteral("Select a clip, or put the playhead on one, to zoom."));
+
+    const bool off = any(t, {" remove", " take off", " turn off", " no zoom", " without zoom", " stop zoom", " get rid of", " undo the zoom"});
+    const ZoomMove::Mode mode = any(t, {" in and out", " in & out", " in/out", " in then out", " in, then out", " back out"}) ? ZoomMove::Mode::inOut
+        : any(t, {"zoom out", "zoom-out", "pull out", "pull back"})                                                            ? ZoomMove::Mode::zoomOut
+                                                                                                                                 : ZoomMove::Mode::zoomIn;
+    const bool even = any(t, {" linear", " steady", " even pace", " constant"});
+    const auto amount = zoomScale(t);
+
+    std::vector<MagicEdit> edits;
+    for (const auto& c : targets) {
+        const Uuid id = c.id;
+        edits.push_back(MagicEdit::change(id, off ? QStringLiteral("Zoom off") : QStringLiteral("Zoom"), [=](Project& q) {
+            const auto i = q.index(id);
+            if (!i) return;
+            ClipTransform tf = q.clips[*i].transform.value_or(ClipTransform());
+            if (off) {
+                tf.zoom.reset();
+            } else {
+                if (amount) tf.scale = *amount;
+                else if (tf.scale <= 1.01) tf.scale = 2;
+                ZoomMove move = ZoomMove::starter(mode, q.clips[*i].duration);
+                move.smooth = !even;
+                tf.zoom = move;
+                if (tf.fills()) std::tie(tf.x, tf.y) = tf.zoomedOffset();
+            }
+            if (tf.isIdentity()) q.clips[*i].transform.reset();
+            else q.clips[*i].transform = tf;
+        }));
+    }
+    const int n = int(targets.size());
+    const QString shots = n == 1 ? QStringLiteral("the shot") : QStringLiteral("%1 shots").arg(n);
+    if (off) return planned(p, edits, QStringLiteral("Took the zoom off %1.").arg(shots));
+    const QString how = mode == ZoomMove::Mode::zoomIn ? QStringLiteral("Zooms in on") : mode == ZoomMove::Mode::zoomOut ? QStringLiteral("Zooms out of") : QStringLiteral("Zooms in and back out on");
+    return planned(p, edits, QStringLiteral("%1 %2%3. Change it with the zoom button on Scale.").arg(how, shots, even ? QStringLiteral(" at a steady pace") : QString()));
+}
+
+} // namespace LocalZoom
 
 // MARK: LocalSpeech
 

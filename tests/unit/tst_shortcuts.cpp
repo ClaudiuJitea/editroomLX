@@ -54,7 +54,7 @@ private slots:
         QCOMPARE(KeyCombo("forwardDelete", false, true).display(), QStringLiteral("Shift+Delete"));
         QCOMPARE(KeyCombo::cmd("s", true).macDisplay(), QStringLiteral("⇧⌘S"));
         QCOMPARE(Shortcut::title(A::open), QStringLiteral("Open…"));
-        QCOMPARE(Shortcut::allCases().size(), size_t(43));
+        QCOMPARE(Shortcut::allCases().size(), size_t(44)); // with Reveal in Media (1.0.10)
     }
 
     void typedMenuKeys() {

@@ -51,6 +51,7 @@ inline float max(float a, float b) { return std::max(a, b); }
 inline int min(int a, int b) { return std::min(a, b); }
 inline int max(int a, int b) { return std::max(a, b); }
 inline float abs(float v) { return std::abs(v); }
+inline float sqrt(float v) { return std::sqrt(v); }
 inline float dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
 #define ER_OUT(T) T&
@@ -115,7 +116,7 @@ struct ErLayer {
     float a;
     int pixX;        // pixmap placement (top-left, canvas pixels, y down)
     int pixY;
-    int pad0;
+    int upscale;     // 1: enlarged with the spatial upscaler (export), not just stretched
     int pad1;
 };
 

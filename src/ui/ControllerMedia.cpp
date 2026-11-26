@@ -63,11 +63,10 @@ void Controller::importFiles(const QStringList& paths, bool offer, std::function
             files << path;
         }
     }
-    const int requested = int(paths.size());
-    (void)QtConcurrent::run([this, folders, files, linked, opened, offer, then, requested] {
+    (void)QtConcurrent::run([this, folders, files, linked, opened, offer, then] {
         QStringList all = files;
         for (const QString& f : folders) all += MediaFolders::mediaFiles(f);
-        QMetaObject::invokeMethod(this, [this, all, linked, opened, offer, then, requested] {
+        QMetaObject::invokeMethod(this, [this, all, linked, opened, offer, then] {
             // Files left out of a linked folder stay out when it's looked at again.
             QStringList todo;
             for (const QString& p : all) if (!model_->project().isHidden(p)) todo << p;
@@ -81,7 +80,7 @@ void Controller::importFiles(const QStringList& paths, bool offer, std::function
             auto run = std::make_shared<Run>();
             run->made.resize(size_t(todo.size()));
             run->left = int(todo.size());
-            auto finish = [this, run, linked, opened, offer, then, requested] {
+            auto finish = [this, run, linked, opened, offer, then] {
                 for (const auto& f : linked) importingFolders_.erase(f.id);
                 model_->changeLibrary([this](Project& p) { p.pruneFolders(importingFolders_); });
                 for (const auto& f : linked) {
@@ -96,18 +95,9 @@ void Controller::importFiles(const QStringList& paths, bool offer, std::function
                 }
                 std::vector<MediaAsset> imported;
                 for (const auto& a : run->made) if (a) imported.push_back(*a);
-                // One thing brought in by hand: shown where it sits in Media.
-                if (offer && requested == 1) {
-                    const MediaTree tree(model_->project());
-                    if (opened && tree.exists(*opened)) {
-                        model_->openMediaFolder(*opened);
-                    } else if (linked.empty() && !imported.empty()) {
-                        model_->openMediaFolder(tree.folderOf(imported.front()));
-                        model_->mediaSelection = {imported.front().id};
-                        model_->mediaAnchor = MediaPick::ofAsset(imported.front().id);
-                        emit model_->mediaSelectionChanged();
-                    }
-                }
+                // Brought in by hand (not by an agent, or found in a linked folder): shown where it sits in Media,
+                // picked and scrolled to, so it's clear what came in.
+                if (offer) showImported(imported, linked, opened);
                 emit importChanged();
                 if (then) then(imported);
             };
@@ -149,7 +139,65 @@ void Controller::importFiles(const QStringList& paths, bool offer, std::function
     });
 }
 
+void Controller::adoptReplacements(std::function<void()> then) {
+    const Project& p = model_->project();
+    std::set<QString> used, taken;
+    for (const auto& a : p.assets) used.insert(QFileInfo(a.path).absoluteFilePath());
+    std::vector<std::pair<MediaAsset, QString>> todo;
+    for (const auto& old : p.assets) {
+        if (QFileInfo::exists(old.path)) continue;
+        const QFileInfo gone(old.path);
+        const QDir dir = gone.absoluteDir();
+        if (!dir.exists()) continue;
+        const QString stem = gone.completeBaseName().toLower(), ext = gone.suffix().toLower();
+        QStringList matches;
+        for (const QFileInfo& f : dir.entryInfoList(QDir::Files)) {
+            const QString path = f.absoluteFilePath();
+            if (f.completeBaseName().toLower() == stem && f.suffix().toLower() != ext && MediaFolders::isMedia(path) && !used.count(path) && !taken.count(path))
+                matches << path;
+        }
+        if (matches.size() != 1) continue;
+        taken.insert(matches.first());
+        todo.emplace_back(old, matches.first());
+    }
+    if (todo.empty()) { if (then) then(); return; }
+    (void)QtConcurrent::run([this, todo, then] {
+        std::vector<MediaAsset> fresh;
+        for (const auto& [old, path] : todo)
+            if (auto f = media_.importFile(path, &old)) { f->relativePath.reset(); fresh.push_back(*f); }
+        QMetaObject::invokeMethod(this, [this, fresh, then] {
+            IdSet ids;
+            for (const auto& f : fresh) {
+                bool found = false;
+                model_->changeLibrary([&](Project& p) {
+                    for (auto& a : p.assets) if (a.id == f.id) { a = f; found = true; }
+                });
+                if (!found) continue;
+                ids.insert(f.id);
+                thumbs_->forget(f.id);
+                scrubCache_.forget(f.id);
+            }
+            if (!ids.empty()) {
+                model_->mutate([&](Project& p) { p.fitClips(ids); });
+                model_->setNeedsRebuild();
+            }
+            if (then) then();
+        }, Qt::QueuedConnection);
+    });
+}
+
 void Controller::syncFolders(std::function<void()> then) {
+    if (syncingFolders_ || adoptingReplacements_) { if (then) then(); return; }
+    // Replaced with the same name in another format (beach.mp4 deleted, beach.mov saved beside it): the item takes
+    // the new file, keeping its clips, as Locate would. Only when that one file is the obvious match.
+    adoptingReplacements_ = true;
+    adoptReplacements([this, then] {
+        adoptingReplacements_ = false;
+        syncLinkedFolders(then);
+    });
+}
+
+void Controller::syncLinkedFolders(std::function<void()> then) {
     if (syncingFolders_) { if (then) then(); return; }
     std::vector<MediaFolder> folders = model_->project().folders.value_or(std::vector<MediaFolder>{});
     if (folders.empty()) { if (then) then(); return; }
@@ -165,6 +213,21 @@ void Controller::syncFolders(std::function<void()> then) {
             for (const QString& p : found)
                 if (!have.count(p) && !model_->project().isHidden(p) && !pendingImports_.count(p) && !unreadable_.count(p)) added << p;
             if (auto open = model_->mediaFolder; open && !MediaTree(model_->project()).exists(*open)) model_->openMediaFolder(std::nullopt);
+            // Deleted from a linked folder on disk (or put in the Trash) and not used on the timeline: gone from Media
+            // too, as from the folder. Used ones stay, shown missing, so the edit doesn't lose a clip without a word.
+            // (The folder itself has to be there: a whole linked folder gone is found again with Locate.)
+            {
+                const Project& p = model_->project();
+                std::set<Uuid> used;
+                for (const auto& c : p.clips) if (c.assetID) used.insert(*c.assetID);
+                IdSet gone;
+                for (const auto& a : p.assets) {
+                    if (used.count(a.id) || QFileInfo::exists(a.path)) continue;
+                    const MediaFolder* f = p.linkedFolder(a.path);
+                    if (f && MediaFolders::isFolder(f->path)) gone.insert(a.id);
+                }
+                model_->dropDeletedFromDisk(gone);
+            }
             if (!added.isEmpty()) importFiles(added, false, [then](std::vector<MediaAsset>) { if (then) then(); });
             else if (then) then();
         }, Qt::QueuedConnection);
@@ -250,6 +313,49 @@ bool Controller::relink(const Uuid& id, const QString& path) {
     model_->changeLibrary([](Project&) {}, true);
     model_->setNeedsRebuild();
     return true;
+}
+
+void Controller::showImported(const std::vector<MediaAsset>& assets, const std::vector<MediaFolder>& folders, const std::optional<QString>& opened) {
+    // Opens the folder an import landed in, picks what came in and asks the Media panel to scroll to it: a new
+    // linked folder's tile, or the files (those in the same folder as the first, when they're spread out).
+    // Not while the mouse is down (a file that came in first, grabbed and being dragged while the rest were still
+    // coming): opening its folder or scrolling would move it out from under the pointer, and the drag would be lost.
+    if (QGuiApplication::mouseButtons() != Qt::NoButton) return;
+    EditorModel& m = *model_;
+    const Project& p = m.project();
+    const MediaTree tree(p);
+    if (opened && tree.exists(*opened)) {
+        m.openMediaFolder(*opened);
+        m.mediaSelection.clear();
+        m.folderSelection.clear();
+        emit m.mediaSelectionChanged();
+        return;
+    }
+    std::vector<MediaFolder> roots;
+    for (const auto& f : folders)
+        for (const auto& o : p.folders.value_or(std::vector<MediaFolder>{})) if (o.id == f.id) { roots.push_back(f); break; }
+    if (!roots.empty()) {
+        m.openMediaFolder(std::nullopt);
+        m.mediaSelection.clear();
+        for (const auto& a : assets) if (!tree.folderOf(a)) m.mediaSelection.insert(a.id);
+        m.folderSelection.clear();
+        for (const auto& f : roots) m.folderSelection.insert(f.path);
+        m.mediaAnchor = MediaPick::ofFolder(roots.front().path);
+        emit m.mediaSelectionChanged();
+        emit m.mediaRevealRequested(MediaPick::ofFolder(roots.front().path));
+        return;
+    }
+    const MediaAsset* first = nullptr;
+    for (const auto& a : assets) if (p.asset(a.id)) { first = &a; break; }
+    if (!first) return;
+    const auto place = tree.folderOf(*first);
+    m.openMediaFolder(place);
+    m.mediaSelection.clear();
+    for (const auto& a : assets) if (tree.folderOf(a) == place) m.mediaSelection.insert(a.id);
+    m.folderSelection.clear();
+    m.mediaAnchor = MediaPick::ofAsset(first->id);
+    emit m.mediaSelectionChanged();
+    emit m.mediaRevealRequested(MediaPick::ofAsset(first->id));
 }
 
 void Controller::relinkFolder(const QString& from, const QString& to) {

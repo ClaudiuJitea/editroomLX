@@ -5,6 +5,7 @@
 #include <QListWidget>
 #include <QSyntaxHighlighter>
 #include <QTextBlock>
+#include <QTextLayout>
 
 namespace er {
 
@@ -156,6 +157,9 @@ std::optional<std::pair<int, QString>> MentionField::query() const {
 }
 
 void MentionField::refreshList() {
+    // Mid-composition (Pinyin, Japanese, a dead key): the input method owns the text until a choice is made,
+    // so the candidate list stays. Plain typing never composes, so mentions still update on every key.
+    if (const QTextLayout* l = textCursor().block().layout(); l && !l->preeditAreaText().isEmpty()) return;
     const auto q = query();
     options_ = q ? MentionOption::list(q->second, model_) : std::vector<MentionOption>{};
     // Exactly what's typed already: nothing to offer.

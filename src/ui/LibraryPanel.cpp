@@ -18,6 +18,9 @@
 #include <QPainterPath>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QLinearGradient>
+#include <QTimer>
+#include <QPropertyAnimation>
 #include <QScrollBar>
 #include <QSettings>
 #include <QToolTip>
@@ -284,16 +287,16 @@ void MediaGrid::drawPicture(QPainter& p, const Item& it, bool compact) {
     if (it.folder) {
         // A folder: its picture, and a warning when it's missing.
         const bool missing = !MediaFolders::isFolder(it.folderPath);
-        p.fillRect(r, Theme::raised());
-        Symbols::draw(p, QStringLiteral("folder"), r.center(), compact ? 14 : 21, Theme::textDim(), 300);
+        // Quiet: a faint fill and no outline, so it sits back among the clips' (mostly dark) pictures.
+        p.fillRect(r, Theme::ink(0.02));
+        QColor sym = Theme::textDim();
+        sym.setAlphaF(sym.alphaF() * 0.8);
+        Symbols::draw(p, QStringLiteral("folder"), r.center(), compact ? 14 : 21, sym, 300);
         if (missing) {
             p.fillRect(r, QColor(0, 0, 0, 115));
             Symbols::draw(p, QStringLiteral("exclamationmark.triangle.fill"), r.center(), 13, yellow(), 500);
         }
         p.restore();
-        p.setPen(QPen(Theme::ink(0.06), 1));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
         return;
     }
     const MediaAsset& a = it.asset;
@@ -342,16 +345,14 @@ void MediaGrid::paintEvent(QPaintEvent* e) {
     p.setRenderHint(QPainter::Antialiasing);
     const EditorModel& m = c_.model();
     const MediaTree tree(m.project());
-    // Library items used by whatever is selected on the timeline.
-    std::set<Uuid> inSelection;
-    for (const auto& id : m.selection()) if (const Clip* cl = m.project().clip(id); cl && cl->assetID) inSelection.insert(*cl->assetID);
     const bool thumbs = mediaLayout() == MediaLayout::thumbnails;
     for (size_t i = 0; i < items_.size(); ++i) {
         const Item& it = items_[i];
         if (!it.rect.intersects(QRectF(e->rect()))) continue;
         const bool hovering = hover_ == i;
         const bool picked = it.folder ? m.folderSelection.count(it.folderPath) > 0 : m.mediaSelection.count(it.asset.id) > 0;
-        const bool selected = !it.folder && inSelection.count(it.asset.id);
+        // Media no longer brightens the source of the selected timeline clip: Reveal in Media shows it instead.
+        const bool selected = false;
         const double radius = thumbs ? 8 : 7;
         p.setPen(Qt::NoPen);
         if (picked) { p.setBrush(Theme::ink(0.12)); p.drawRoundedRect(it.rect, radius, radius); }
@@ -479,11 +480,22 @@ void MediaGrid::leaveEvent(QEvent*) {
     update();
 }
 
+namespace {
+/// A click on empty space (between items or below them) lets go of what's picked in Media; the timeline's
+/// selection is left as it is.
+void clearPicks(EditorModel& m) {
+    if (m.mediaSelection.empty() && m.folderSelection.empty()) return;
+    m.mediaSelection.clear();
+    m.folderSelection.clear();
+    emit m.mediaSelectionChanged();
+}
+} // namespace
+
 void MediaGrid::mousePressEvent(QMouseEvent* e) {
     if (e->button() != Qt::LeftButton) return;
     press_ = e->position();
     pressed_ = itemAt(e->position());
-    if (!pressed_) return;
+    if (!pressed_) { clearPicks(c_.model()); return; }
     // A click picks it (Shift for a range, Ctrl to add or take away).
     std::vector<MediaPick> order;
     for (const auto& it : items_) order.push_back(it.pick());
@@ -510,7 +522,8 @@ void MediaGrid::openFolder(const QString& folder) {
 
 void MediaGrid::contextMenuEvent(QContextMenuEvent* e) {
     auto i = itemAt(e->pos());
-    if (!i) { LibraryPanel::panelMenu(c_, this, e->globalPos()); return; }
+    // On empty space, as in Finder: what's picked is let go first.
+    if (!i) { clearPicks(c_.model()); LibraryPanel::panelMenu(c_, this, e->globalPos()); return; }
     const Item it = items_[*i];
     if (it.folder) folderMenu(it, e->globalPos()); else assetMenu(it, e->globalPos());
 }
@@ -650,6 +663,23 @@ private:
     int angle_ = 0;
 };
 
+namespace {
+/// Drawn over the whole panel, letting the mouse through.
+class DropOverlay : public QWidget {
+public:
+    using Paint = std::function<void(QPainter&, const QRectF&)>;
+    DropOverlay(Paint paint, QWidget* parent) : QWidget(parent), paint_(std::move(paint)) {}
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        paint_(p, QRectF(rect()));
+    }
+private:
+    Paint paint_;
+};
+} // namespace
+
 LibraryPanel::LibraryPanel(Controller& c, QWidget* parent) : QWidget(parent), c_(c) {
     setAcceptDrops(true);
     auto* v = new QVBoxLayout(this);
@@ -741,6 +771,32 @@ LibraryPanel::LibraryPanel(Controller& c, QWidget* parent) : QWidget(parent), c_
     scroll_->setWidget(body_);
     v->addWidget(scroll_, 1);
 
+    // Files dragged over the panel, or anywhere else in the window that imports: they'll land here.
+    dropOverlay_ = new DropOverlay([](QPainter& p, const QRectF& r) {
+        // What happens, on a dark fade up from the bottom, so it reads over any pictures and the media stays in view.
+        const double fadeH = std::min(150.0, r.height());
+        QLinearGradient fade(QPointF(0, r.bottom()), QPointF(0, r.bottom() - fadeH));
+        fade.setColorAt(0, QColor(0, 0, 0, int(0.92 * 255)));
+        fade.setColorAt(0.45, QColor(0, 0, 0, int(0.7 * 255)));
+        fade.setColorAt(1, QColor(0, 0, 0, 0));
+        p.fillRect(QRectF(r.left(), r.bottom() - fadeH, r.width(), fadeH), fade);
+        const QColor ink(0xF2, 0xF2, 0xF0);
+        p.setFont(Theme::font(12, 600));
+        const QString label = QStringLiteral("Add to Media");
+        const double tw = QFontMetricsF(p.font()).horizontalAdvance(label);
+        const double total = 11 + 6 + tw, x = r.center().x() - total / 2, y = r.bottom() - 22 - 8;
+        Symbols::draw(p, QStringLiteral("arrow.down.to.line"), QPointF(x + 5.5, y), 11, ink, 600);
+        p.setPen(ink);
+        p.drawText(QRectF(x + 17, y - 9, tw + 2, 18), Qt::AlignVCenter | Qt::AlignLeft, label);
+        p.setPen(QPen(alpha(Theme::accent(), 0.9), 2));
+        p.setBrush(Qt::NoBrush);
+        p.drawRect(r.adjusted(1, 1, -1, -1));
+    }, this);
+    dropOverlay_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    dropOverlay_->hide();
+    connect(&c_, &Controller::importDropHoverChanged, this, [this] { showDropped(); });
+    connect(&c_.model(), &EditorModel::mediaRevealRequested, this, &LibraryPanel::reveal);
+
     connect(search_, &QLineEdit::textChanged, grid_, &MediaGrid::setSearch);
     connect(grid_, &MediaGrid::contentChanged, this, &LibraryPanel::refresh);
     connect(grid_, &MediaGrid::folderOpened, search_, &QLineEdit::clear);
@@ -764,7 +820,7 @@ void LibraryPanel::refresh() {
     const bool nothing = p.assets.empty() && tree.folders(std::nullopt).isEmpty();
     empty_->setVisible(nothing);
     grid_->setVisible(!nothing);
-    search_->setPlaceholderText(inFolder ? QStringLiteral("Search ") + MediaTree::name(*folder) : QStringLiteral("Search"));
+    search_->setPlaceholderText(inFolder ? QStringLiteral("Search folder") : QStringLiteral("Search"));
     const QString s = search_->text();
     noMatch_->setVisible(!nothing && grid_->empty());
     noMatch_->setText(s.contains(u'"') || s.contains(QChar(0x201C)) ? QStringLiteral("Nothing says %1").arg(s) : QStringLiteral("No media matches “%1”").arg(s));
@@ -773,10 +829,36 @@ void LibraryPanel::refresh() {
 void LibraryPanel::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.fillRect(rect(), Theme::panel());
-    if (dropTargeted_) {
-        p.setPen(QPen(alpha(Theme::accent(), 0.9), 2));
-        p.drawRect(QRectF(rect()).adjusted(1, 1, -1, -1));
+}
+
+void LibraryPanel::showDropped() {
+    const bool on = dropTargeted_ || c_.importDropHover();
+    if (on) {
+        dropOverlay_->setGeometry(rect());
+        dropOverlay_->raise();
     }
+    dropOverlay_->setVisible(on);
+}
+
+void LibraryPanel::reveal(const MediaPick& target) {
+    // Just imported: scrolled into view (after the folder it's in has opened and drawn).
+    search_->clear();
+    QTimer::singleShot(0, this, [this, target] {
+        grid_->relayout();
+        for (const auto& it : grid_->items()) {
+            if (!(it.pick() == target)) continue;
+            const QPoint centre = grid_->mapTo(body_, it.rect.center().toPoint());
+            QScrollBar* bar = scroll_->verticalScrollBar();
+            const int to = std::clamp(centre.y() - scroll_->viewport()->height() / 2, bar->minimum(), bar->maximum());
+            auto* anim = new QPropertyAnimation(bar, "value", bar);
+            anim->setDuration(250);
+            anim->setEasingCurve(QEasingCurve::OutCubic);
+            anim->setStartValue(bar->value());
+            anim->setEndValue(to);
+            anim->start(QAbstractAnimation::DeleteWhenStopped);
+            return;
+        }
+    });
 }
 
 void LibraryPanel::panelMenu(Controller& c, QWidget* parent, QPoint at) {
@@ -799,23 +881,32 @@ void LibraryPanel::panelMenu(Controller& c, QWidget* parent, QPoint at) {
     menu.exec(at);
 }
 
-void LibraryPanel::contextMenuEvent(QContextMenuEvent* e) { panelMenu(c_, this, e->globalPos()); }
+void LibraryPanel::contextMenuEvent(QContextMenuEvent* e) {
+    if (scroll_->geometry().contains(e->pos())) clearPicks(c_.model());
+    panelMenu(c_, this, e->globalPos());
+}
+
+void LibraryPanel::mousePressEvent(QMouseEvent* e) {
+    // Below the items: lets go of what's picked, as between them.
+    if (e->button() == Qt::LeftButton && scroll_->geometry().contains(e->position().toPoint())) clearPicks(c_.model());
+}
 
 void LibraryPanel::dragEnterEvent(QDragEnterEvent* e) {
     if (!e->mimeData()->hasUrls()) return;
     dropTargeted_ = true;
-    update();
+    showDropped();
     e->acceptProposedAction();
 }
 
 void LibraryPanel::dragLeaveEvent(QDragLeaveEvent*) {
     dropTargeted_ = false;
-    update();
+    showDropped();
 }
 
 void LibraryPanel::dropEvent(QDropEvent* e) {
     dropTargeted_ = false;
-    update();
+    c_.setImportDropHover(false);
+    showDropped();
     QStringList paths;
     for (const QUrl& u : e->mimeData()->urls()) if (u.isLocalFile()) paths << u.toLocalFile();
     c_.importFiles(paths);

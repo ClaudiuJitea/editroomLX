@@ -1,6 +1,8 @@
 #include "Alert.h"
 #include "Theme.h"
+#include <QApplication>
 #include <QHBoxLayout>
+#include <cmath>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPushButton>
@@ -43,6 +45,16 @@ Alert::Alert(const QString& message, const QString& info, const QStringList& but
 
 int Alert::run(QWidget* parent, const QString& message, const QString& info, const QStringList& buttons) {
     Alert a(message, info, buttons, parent);
+    // Centred on Editroom's window across, and a little above its middle (10% of its height), where a box looks
+    // centred; placed before it opens, so it doesn't show elsewhere for a frame and then move. (Wayland doesn't let
+    // clients place windows: there the compositor centres it on its parent.)
+    QWidget* over = parent ? parent->window() : QApplication::activeWindow();
+    if (over && over->isVisible()) {
+        a.adjustSize();
+        const QRect f = over->frameGeometry();
+        const QSize size = a.sizeHint().expandedTo(a.minimumSize());
+        a.move(f.center().x() - size.width() / 2, int(std::round(f.center().y() - f.height() * 0.1 - size.height() / 2.0)));
+    }
     a.exec();
     if (a.choice() >= 0) return a.choice();
     for (qsizetype i = 0; i < buttons.size(); ++i)

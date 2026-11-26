@@ -161,6 +161,46 @@ private slots:
         for (const auto& h : found.value("found").toArray()) if (!h.toObject().value("said").toArray().isEmpty()) saidIt = true;
         QVERIFY(saidIt);
     }
+
+    void zoomTool() {
+        // set_transform's zoom (in at 1s over 1.5s, framing the right side), reported by get_project, an out that ends
+        // with the clip, and off keeping the scale; a mode it doesn't know is refused.
+        Project p;
+        Clip clip(p.videoTracks[0].id, ClipKind::solid, 0, 6);
+        p.clips = {clip};
+        c->model().load(p, {});
+        const QString id = clip.id.toString(QUuid::WithoutBraces).toUpper();
+        auto err = [](const QJsonObject& r) { return r.value("isError").toBool(); };
+        QVERIFY(!err(call("set_transform", QJsonObject{{"clip_id", id}, {"zoom", "in"}, {"zoom_start", 1.0}, {"zoom_seconds", 1.5}, {"focus_x", 0.75}})));
+        auto z = c->model().project().clip(clip.id)->transform;
+        QVERIFY(z && z->zoom);
+        QCOMPARE(z->scale, 2.0);
+        QVERIFY(z->zoom->mode == ZoomMove::Mode::zoomIn);
+        QCOMPARE(z->zoom->p1, 1.0);
+        QCOMPARE(z->zoom->p2, 2.5);
+        QVERIFY(std::abs(z->x + 0.5) < 1e-9);
+        QVERIFY(!z->at(0));
+        QCOMPARE(z->at(3)->scale, 2.0);
+        const QString shown = call("get_project", {}).value("content").toArray().first().toObject().value("text").toString();
+        QVERIFY(shown.contains(QStringLiteral("\"zoom\"")));
+        QVERIFY(!err(call("set_transform", QJsonObject{{"clip_id", id}, {"zoom", "out"}, {"zoom_seconds", 2.0}, {"zoom_smooth", false}})));
+        const auto o = c->model().project().clip(clip.id)->transform->zoom;
+        QVERIFY(o && o->mode == ZoomMove::Mode::zoomOut && o->p3 == 4 && o->p4 == 6 && !o->smooth);
+        QVERIFY(!err(call("set_transform", QJsonObject{{"clip_id", id}, {"zoom", "off"}})));
+        QVERIFY(!c->model().project().clip(clip.id)->transform->zoom);
+        QCOMPARE(c->model().project().clip(clip.id)->transform->scale, 2.0);
+        QVERIFY(err(call("set_transform", QJsonObject{{"clip_id", id}, {"zoom", "sideways"}})));
+    }
+
+    void startupLists() {
+        // Asked by agents as they start (Codex): answered, empty, without opening Editroom.
+        for (const char* m : {"resources/list", "resources/templates/list", "prompts/list"}) {
+            QVERIFY(MCPHandler::isStartup(QLatin1String(m)));
+            const auto r = MCPHandler::handshake(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", m}});
+            QVERIFY(r && r->contains("result"));
+        }
+        QVERIFY(!MCPHandler::isStartup(QStringLiteral("tools/call")));
+    }
 };
 
 QTEST_MAIN(TestMCP)

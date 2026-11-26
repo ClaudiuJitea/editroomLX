@@ -4,7 +4,8 @@ This is the prompt for building and maintaining **Editroom LX**: the Linux versi
 `../editroom/` (Swift, SwiftUI/AppKit, AVFoundation, Core Image on Metal). Work in `editroomLX/` only.
 Never change `../editroom/`: it is the reference. The step-by-step plan is in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
-Mac baseline for the first port: `editroom@7b7b865` (version 1.0.3, build 4, 2026-11-25).
+Mac baseline for the first port: `editroom@7b7b865` (version 1.0.3, build 4, 2026-11-25). Current baseline:
+`editroom@4272a42` (version 1.0.10, build 11, 2026-11-27); see `docs/sync/`.
 
 ---
 
@@ -70,7 +71,10 @@ points (IMPLEMENTATION.md §3 has the full table):
 | Speech (`SpeechTranscriber`) | whisper.cpp with its Vulkan backend, giving word timestamps |
 | Foundation Models (on-device LLM) | llama.cpp with its Vulkan backend: a small GGUF model, JSON-schema / grammar-constrained output, downloaded only on request |
 | Accelerate / vDSP | pocketfft / KissFFT on the CPU; VkFFT where it runs on the GPU |
-| Sparkle | The same signed `appcast.xml` feed (EdDSA), self-update for the AppImage, and "open release page" for distro and Flatpak installs |
+| Sparkle | GitHub's releases API for `ClaudiuJitea/editroomLX` (the owner's choice), opening the release page to update |
+| MetalFX spatial upscaler (export) | AMD FidelityFX Super Resolution 1 EASU (MIT), in the shared kernel |
+| AVFoundation HDR→SDR on read | The curve the Mac fitted to macOS's own conversion (SourceColor) |
+| File promises (Photos drags) | None needed: Linux drops are plain file paths |
 | AppKit / SwiftUI | Qt 6 Widgets with a QSS + QPainter style that matches the Mac exactly, and a custom `QProxyStyle` |
 | NSWorkspace / bundle IDs / `.mcpb` | XDG (`.desktop`, MIME type `application/x-editroom`), `claude mcp add`, `~/.codex/config.toml`; Claude Desktop only if it is installed on Linux |
 | UserDefaults, Application Support, Caches | QSettings (`~/.config/Editroom`), `$XDG_DATA_HOME/Editroom`, `$XDG_CACHE_HOME/Editroom` |

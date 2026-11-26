@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+#include <QAbstractSpinBox>
+#include <QTextEdit>
 #include "Updates.h"
 #include <QIcon>
 #include <QDialog>
@@ -9,6 +11,7 @@
 #include "PreviewPanel.h"
 #include "SettingsDialog.h"
 #include "Theme.h"
+#include "TimelineCanvas.h"
 #include "TimelinePanel.h"
 #include "Widgets.h"
 #include <QApplication>
@@ -93,6 +96,8 @@ MainWindow::MainWindow(Controller& c, QWidget* parent)
     timeline_->setMinimumHeight(170);
     v->addWidget(vertical_, 1);
     setCentralWidget(central);
+    // The window starts on the timeline, so the Media search never takes focus as Editroom opens.
+    timeline_->canvas()->setFocus(Qt::OtherFocusReason);
     QSettings s;
     const int libW = s.value(QStringLiteral("libraryWidth"), 252).toInt();
     const int tlH = s.value(QStringLiteral("timelineHeight"), 360).toInt();
@@ -181,7 +186,20 @@ void MainWindow::rebuildMenus() {
     textAction(QStringLiteral("Cut"), "cut", QKeySequence::Cut);
     textAction(QStringLiteral("Copy"), "copy", QKeySequence::Copy);
     textAction(QStringLiteral("Paste"), "paste", QKeySequence::Paste);
-    textAction(QStringLiteral("Select All"), "selectAll", QKeySequence::SelectAll);
+    {
+        // Select All: the text in a text field; anywhere else, every clip on the timeline, and the timeline has the
+        // keys now (out of Media, say), so Delete reaches the clips.
+        QAction* a = edit->addAction(QStringLiteral("Select All"), this, [this] {
+            QWidget* f = QApplication::focusWidget();
+            if (f && (qobject_cast<QLineEdit*>(f) || qobject_cast<QTextEdit*>(f) || qobject_cast<QPlainTextEdit*>(f) || qobject_cast<QAbstractSpinBox*>(f))) {
+                QMetaObject::invokeMethod(f, "selectAll");
+                return;
+            }
+            c_.model().selectAll();
+            timeline_->canvas()->setFocus(Qt::ShortcutFocusReason);
+        });
+        a->setShortcut(QKeySequence::SelectAll);
+    }
     edit->addSeparator();
     QAction* settings = edit->addAction(QStringLiteral("Settings…"), this, &MainWindow::showSettings);
     settings->setShortcut(QKeySequence(QStringLiteral("Ctrl+,")));
@@ -201,6 +219,7 @@ void MainWindow::rebuildMenus() {
     const MediaAsset* matchable = m.matchableAsset();
     item(clip, QStringLiteral("Match Sequence to Clip"), [&m] { if (auto* a = m.matchableAsset()) m.matchSequence(*a); }, std::nullopt,
          matchable && !m.sequenceMatches(*matchable));
+    item(clip, QStringLiteral("Reveal in Media"), [&m] { m.revealInMedia(); }, ShortcutAction::revealInMedia, m.revealableAsset() != nullptr);
     clip->addSeparator();
     item(clip, QStringLiteral("Delete"), [&m] { m.deleteSelected(); }, ShortcutAction::delete_, m.canDeleteSelected());
     item(clip, QStringLiteral("Ripple Delete"), [&m] { m.deleteSelected(true); }, ShortcutAction::rippleDelete, m.canDeleteSelected());
@@ -326,6 +345,7 @@ void MainWindow::perform(ShortcutAction a) {
     case A::rippleDelete: m.deleteSelected(true); break;
     case A::rippleTrimStart: m.rippleTrim(true); break;
     case A::rippleTrimEnd: m.rippleTrim(false); break;
+    case A::revealInMedia: m.revealInMedia(); break;
     case A::addMarker: m.addMarker(); break;
     case A::setIn: m.setInPoint(); break;
     case A::setOut: m.setOutPoint(); break;
@@ -393,10 +413,16 @@ void MainWindow::closeEvent(QCloseEvent* e) {
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
-    if (e->mimeData()->hasUrls()) e->acceptProposedAction();
+    if (!e->mimeData()->hasUrls()) return;
+    // It lights up the Media panel, where they go, rather than the whole window.
+    c_.setImportDropHover(true);
+    e->acceptProposedAction();
 }
 
+void MainWindow::dragLeaveEvent(QDragLeaveEvent*) { c_.setImportDropHover(false); }
+
 void MainWindow::dropEvent(QDropEvent* e) {
+    c_.setImportDropHover(false);
     QStringList media;
     for (const QUrl& u : e->mimeData()->urls()) {
         if (!u.isLocalFile()) continue;

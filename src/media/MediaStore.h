@@ -14,8 +14,13 @@ namespace er {
 struct FileStamp {
     qint64 size = 0;
     QDateTime date;
+    /// The file's identity on its disk (its inode): a file replaced by another of the same name (a rotated copy,
+    /// say, that kept its size and date) is a different file.
+    quint64 number = 0;
     static std::optional<FileStamp> of(const QString& path);
-    bool operator==(const FileStamp& o) const { return size == o.size && date == o.date; }
+    /// The file's number on its disk, 0 when it can't be read.
+    static quint64 fileNumber(const QString& path);
+    bool operator==(const FileStamp& o) const { return size == o.size && date == o.date && number == o.number; }
 };
 
 class MediaStore : public QObject, public MediaInfo {

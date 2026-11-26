@@ -13,8 +13,8 @@ C++20, Qt 6 and Vulkan. GPU where it helps, everything on your computer.</p>
 
 Bring in videos, photos and sound from anywhere: linked folders, drag and drop, or the Media panel. Hover over a
 clip in Media to skim it in the viewer. On the timeline you can trim, split, move with the linked sound following,
-copy with Alt, and use snapping, markers, an in/out range, fades, gain lines, dissolves and speed ramps. Every
-change is one undo step.
+copy with Alt, and use snapping, markers, an in/out range, fades, gain lines, dissolves, speed ramps and zooms.
+Reveal in Media (Shift+F) finds a clip's file in Media. Every change is one undo step.
 
 ![Titles, with their own inspector](docs/images/titles.png)
 
@@ -29,6 +29,7 @@ change is one undo step.
 
 Ask for an edit in plain words, or leave the box empty for the best cut Editroom can make from your Media. It runs
 through Claude Code or Codex (ChatGPT), or **Local**, which works on this computer with no account and no network.
+Any other AI app can connect with the prompt from Settings › Magic › Copy Prompt.
 Point at things with `@`: the playhead, the selection, the in/out range, a file, a clip or a marker.
 
 ![The Magic box](docs/images/magic-box.png)
@@ -67,7 +68,8 @@ move shots by name. AI apps connected over MCP can edit as well: 43 tools on 127
 ### Export
 
 MP4 in H.264 or HEVC through hardware encoders (VA-API, NVENC, Vulkan), checked for correct colour before they're
-used. Falls back to libx264 or libopenh264, and also writes WAV. Vertical, square and portrait crops, loudness
+used. Video exported bigger than its own pixels (a 1080p clip at 4K) is upscaled with an edge-aware upscaler (AMD
+FSR 1's EASU) rather than stretched. Falls back to libx264 or libopenh264, and also writes WAV. Vertical, square and portrait crops, loudness
 targets, the in/out range only, and a queue that runs in the background.
 
 ![Export](docs/images/export.png)

@@ -239,8 +239,18 @@ QJsonObject MCPTools::clipJSON(const Clip& c, const Project& p) {
                                       {"bold", c.text.bold}, {"color", hex(c.text.color)}, {"x", r3(c.text.x)}, {"y", r3(c.text.y)}});
     }
     if (c.kind == ClipKind::solid) d.insert("color", hex(c.color));
-    if (c.transform && !c.transform->isIdentity())
-        d.insert("transform", QJsonObject{{"scale", r3(c.transform->scale)}, {"x", r3(c.transform->x)}, {"y", r3(c.transform->y)}});
+    if (c.transform && !c.transform->isIdentity()) {
+        QJsonObject t{{"scale", r3(c.transform->scale)}, {"x", r3(c.transform->x)}, {"y", r3(c.transform->y)}};
+        // An animated zoom: seconds into the clip that it moves in and out.
+        if (const auto& z = c.transform->zoom) {
+            QJsonObject zd{{"mode", z->mode == ZoomMove::Mode::zoomIn ? QStringLiteral("in") : z->mode == ZoomMove::Mode::zoomOut ? QStringLiteral("out") : QStringLiteral("in_out")},
+                           {"smooth", z->smooth}};
+            if (z->mode != ZoomMove::Mode::zoomOut) zd.insert("in", QJsonArray{r3(z->p1), r3(z->p2)});
+            if (z->mode != ZoomMove::Mode::zoomIn) zd.insert("out", QJsonArray{r3(z->p3), r3(z->p4)});
+            t.insert("zoom", zd);
+        }
+        d.insert("transform", t);
+    }
     if (c.grade) {
         const ColorGrade& g = *c.grade;
         QJsonObject gd;
@@ -1328,6 +1338,41 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
         if (auto s = number(args, "scale")) tf.scale = std::clamp(*s, ClipTransform::scaleMin, ClipTransform::scaleMax);
         if (auto x = number(args, "x")) tf.x = std::clamp(*x, -2.0, 2.0);
         if (auto y = number(args, "y")) tf.y = std::clamp(*y, -2.0, 2.0);
+        // Zoom: from the full frame to this framing over the clip (as the Scale field's zoom button).
+        if (args.value("zoom").isString()) {
+            const QString z = args.value("zoom").toString();
+            if (z == QLatin1String("off")) {
+                tf.zoom.reset();
+            } else if (z == QLatin1String("in") || z == QLatin1String("in_out") || z == QLatin1String("out")) {
+                const auto mode = z == QLatin1String("in") ? ZoomMove::Mode::zoomIn : z == QLatin1String("out") ? ZoomMove::Mode::zoomOut : ZoomMove::Mode::inOut;
+                const double length = c.duration;
+                if (!number(args, "scale") && tf.scale <= 1.01) tf.scale = 2;
+                ZoomMove move = ZoomMove::starter(mode, length);
+                const auto secs = number(args, "zoom_seconds");
+                const double mv = secs ? std::min(std::max(*secs, 0.05), mode == ZoomMove::Mode::inOut ? length / 2 : length)
+                                       : (move.p2 - move.p1 > 0 ? move.p2 - move.p1 : move.p4 - move.p3);
+                const auto start = number(args, "zoom_start");
+                switch (mode) {
+                case ZoomMove::Mode::zoomIn:
+                    move.p1 = start.value_or(0); move.p2 = move.p1 + mv; move.p3 = length; move.p4 = length; break;
+                case ZoomMove::Mode::zoomOut:
+                    move.p1 = 0; move.p2 = 0; move.p3 = start.value_or(length - mv); move.p4 = move.p3 + mv; break;
+                case ZoomMove::Mode::inOut:
+                    move.p1 = start.value_or(0); move.p2 = move.p1 + mv; move.p3 = std::max(move.p2, length - mv); move.p4 = length; break;
+                }
+                if (args.value("zoom_smooth").isBool()) move.smooth = args.value("zoom_smooth").toBool();
+                move.fit(length);
+                tf.zoom = move;
+            } else {
+                throw MCPToolError{QStringLiteral("zoom is in, in_out, out or off.")};
+            }
+        } else if (args.value("zoom_smooth").isBool() && tf.zoom) {
+            tf.zoom->smooth = args.value("zoom_smooth").toBool();
+        }
+        // A point to frame: the picture is moved so that point is centred (kept within its edges when it fills).
+        if (auto fx = number(args, "focus_x")) tf.x = std::clamp(-(std::clamp(*fx, 0.0, 1.0) - 0.5) * tf.scale, -2.0, 2.0);
+        if (auto fy = number(args, "focus_y")) tf.y = std::clamp(-(std::clamp(*fy, 0.0, 1.0) - 0.5) * tf.scale, -2.0, 2.0);
+        if (tf.fills()) std::tie(tf.x, tf.y) = tf.zoomedOffset();
         const Uuid id = c.id;
         perform({MagicEdit::change(id, QStringLiteral("Transform"), [id, tf](Project& q) {
             if (auto i = q.index(id)) { if (tf.isIdentity()) q.clips[*i].transform.reset(); else q.clips[*i].transform = tf; }

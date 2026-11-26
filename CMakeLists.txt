@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EditroomLX VERSION 1.0.3 LANGUAGES CXX)
+project(EditroomLX VERSION 1.0.10 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(FFmpeg REQUIRED)
 
 # Mac baseline this tree is synced to (see docs/sync/).
-set(EDITROOM_MAC_BASELINE "7b7b865")
+set(EDITROOM_MAC_BASELINE "4272a42")
 
 add_subdirectory(src/model)
 add_subdirectory(src/editor)

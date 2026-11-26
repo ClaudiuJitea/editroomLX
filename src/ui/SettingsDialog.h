@@ -31,6 +31,8 @@ struct AgentServerHooks {
     std::function<QString()> problem;
     /// Agents that did something in the last minute: their names, newest first.
     std::function<QStringList()> active;
+    /// Where agents reach the server (Streamable HTTP), for Copy Prompt.
+    std::function<QString()> endpoint;
 };
 
 class SettingsDialog : public QDialog {

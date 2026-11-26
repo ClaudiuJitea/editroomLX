@@ -30,6 +30,14 @@ private slots:
         // HLG's diffuse white (75%) lands near Rec.709 white, eased by the knee.
         auto [r, g, b] = SourceColors::convert(SourceColor::hlg, 0.75, 0.75, 0.75);
         QVERIFY(r > 0.95 && r < 1.0 && std::abs(r - g) < 1e-9 && std::abs(g - b) < 1e-9);
+        // iPhone HDR (with Dolby Vision) is compressed as macOS does it (0.317 × light^0.88 + 0.014): diffuse white at
+        // about 57% of Rec.709 white, grey staying grey, leaving room for everything brighter.
+        auto [vr, vg, vb] = SourceColors::convert(SourceColor::hlgVision, 0.75, 0.75, 0.75);
+        QVERIFY2(vr > 0.55 && vr < 0.59 && std::abs(vr - vg) < 1e-9 && std::abs(vg - vb) < 1e-9, qPrintable(QString::number(vr)));
+        auto [pr, pg, pb] = SourceColors::convert(SourceColor::hlgVision, 1.0, 1.0, 1.0);
+        QVERIFY(pr > vr + 0.1 && pr < 1.0);
+        (void)pg; (void)pb;
+        QVERIFY(SourceColors::cube(SourceColor::hlgVision) && SourceColors::cube(SourceColor::pqVision));
         // Black stays black; Log's 18% grey is mid-grey.
         auto [k, k2, k3] = SourceColors::convert(SourceColor::pq, 0, 0, 0);
         QVERIFY(k == 0 && k2 == 0 && k3 == 0);
@@ -201,6 +209,44 @@ private slots:
         QCOMPARE(nv.size(), size_t(6 * 4 + 3 * 2 * 2));
         QCOMPARE(int(nv[0]), 235);
         QCOMPARE(int(nv[24]), 128);
+    }
+
+    void upscale() {
+        // Export enlarges video drawn bigger than its pixels (MetalFX on the Mac, FSR 1's EASU here): the same way up
+        // and the same colours as a plain resize, and an edge no softer. 320 × 180: dark left, light right, a red band
+        // along the top and a blue one along the bottom; drawn at 1280 × 720.
+        FakeMedia m;
+        MediaAsset v; v.kind = MediaKind::video; v.duration = 5; v.name = "v"; v.path = "/x/v.mov";
+        Project p;
+        p.width = 1280; p.height = 720;
+        p.assets = {v};
+        Clip c(p.videoTracks[0].id, ClipKind::video, 0, 5); c.assetID = v.id;
+        p.clips = {c};
+        m.runtimes[v.id] = MediaRuntime{};
+        const VideoFrame src = picture(320, 180, [](int x, int y) {
+            if (y < 30) return std::array<int, 4>{230, 26, 26, 255};
+            if (y >= 150) return std::array<int, 4>{26, 26, 230, 255};
+            const int g = x < 160 ? 51 : 204;
+            return std::array<int, 4>{g, g, g, 255};
+        });
+        auto frames = [src](int, const PlanLayer&, double) { return std::optional<VideoFrame>(src); };
+        auto render = [&](bool up) -> std::vector<uint8_t> {
+            BuildOptions o; o.renderW = 1280; o.renderH = 720; o.upscale = up;
+            const RenderPlan plan = *CompositionBuilder::build(p, m, o);
+            const FrameJob job = describeFrame(plan, 1, frames);
+            if (job.layers.at(0).upscale != (up ? 1 : 0)) qFatal("upscale flag not set as asked");
+            return CpuRenderer::render(job);
+        };
+        const auto a = render(true), b = render(false);
+        auto px = [](const std::vector<uint8_t>& v, int x, int y) { const size_t i = (size_t(y) * 1280 + x) * 4; return std::array<int, 3>{v[i], v[i + 1], v[i + 2]}; };
+        auto near = [](std::array<int, 3> u, std::array<int, 3> w) { return std::abs(u[0] - w[0]) < 14 && std::abs(u[1] - w[1]) < 14 && std::abs(u[2] - w[2]) < 14; };
+        for (auto [x, y] : {std::pair{640, 40}, {640, 680}, {300, 360}, {980, 360}}) QVERIFY2(near(px(a, x, y), px(b, x, y)), qPrintable(QStringLiteral("%1,%2").arg(x).arg(y)));
+        // The edge: how many pixels across row 360 are partway between dark and light.
+        auto soft = [&](const std::vector<uint8_t>& v) { int n = 0; for (int x = 560; x < 720; ++x) { const int r = px(v, x, 360)[0]; if (r > 70 && r < 185) ++n; } return n; };
+        qInfo() << "edge pixels: upscaled" << soft(a) << "plain" << soft(b);
+        QVERIFY(soft(a) <= soft(b));
+        // Never past the four nearest texels: no ringing (nothing darker than dark or lighter than light).
+        for (int x = 560; x < 720; ++x) { const int r = px(a, x, 360)[0]; QVERIFY(r >= 50 && r <= 205); }
     }
 };
 

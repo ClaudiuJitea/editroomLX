@@ -83,6 +83,19 @@ class TestGpu : public QObject {
             m.transcripts[a.id] = tr;
             out.push_back({QStringLiteral("captions"), build(p, 640, 360), 0.5, {}});
         }
+        {
+            // Export's upscaler (EASU): a small video enlarged into a bigger frame, under a transform.
+            Project p;
+            p.assets = {v};
+            Clip c(p.videoTracks[0].id, ClipKind::video, 0, 5); c.assetID = v.id;
+            ClipTransform tr; tr.scale = 1.2; tr.x = 0.05;
+            c.transform = tr;
+            p.clips = {c};
+            MediaRuntime rt; m.runtimes[v.id] = rt;
+            auto frames = [nv12](int, const PlanLayer&, double) { return std::optional<VideoFrame>(nv12); };
+            BuildOptions o; o.renderW = 1280; o.renderH = 720; o.upscale = true;
+            out.push_back({QStringLiteral("upscale"), *CompositionBuilder::build(p, m, o), 1.0, frames});
+        }
         return out;
     }
 

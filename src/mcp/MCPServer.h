@@ -12,6 +12,8 @@ namespace er {
 namespace MCPHandler {
 /// initialize, ping and tools/list: needing nothing from the editor.
 std::optional<QJsonObject> handshake(const QJsonObject& req);
+/// What an agent asks just to get started: answered without opening Editroom when it's closed.
+bool isStartup(const QString& method);
 QJsonObject error(const QJsonValue& id, int code, const QString& message);
 }
 

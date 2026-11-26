@@ -55,6 +55,10 @@ public:
     /// Reload from Disk: opens items' files again as they are now. Clips keep their places and trims; a clip
     /// past the end of a file that got shorter is cut to fit (one undo step).
     void reloadMedia(const IdSet& ids);
+    /// Items whose file is gone, with exactly one media file of the same name (another extension) beside where it
+    /// was, that nothing else in the project uses: pointed at that file, keeping their clips. Undo history is kept
+    /// (the library isn't undone).
+    void adoptReplacements(std::function<void()> then = {});
     /// Reload Folder from Disk: new files come in, and everything in the folder is opened again.
     void reloadFolder(const QString& folder);
     /// Points an item at a file somewhere else (Locate…); others missing from the same folder are found too.
@@ -98,14 +102,23 @@ public:
     QString chooseSaveFile(const QString& suggested) override;
     QString chooseProjectFile() override;
 
+    /// Files are being dragged over the window outside the Media panel and timeline: the panel shows they'll land in it.
+    bool importDropHover() const { return importDropHover_; }
+    void setImportDropHover(bool on) { if (on != importDropHover_) { importDropHover_ = on; emit importDropHoverChanged(on); } }
+
 signals:
     void importChanged();
+    void importDropHoverChanged(bool on);
     void frame(const QImage& image, double time);
     /// The meters moved (emitted only when a reading changed visibly).
     void metersChanged();
 
 private:
     void offerMatch(const MediaAsset& a);
+    void syncLinkedFolders(std::function<void()> then);
+    void showImported(const std::vector<MediaAsset>& assets, const std::vector<MediaFolder>& folders, const std::optional<QString>& opened);
+    bool importDropHover_ = false;
+    bool adoptingReplacements_ = false;
     MediaStore media_;
     std::unique_ptr<SoundStore> sound_;
     std::unique_ptr<PlaybackEngine> engine_;

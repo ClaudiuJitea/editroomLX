@@ -355,6 +355,36 @@ private slots:
         c.model().undo();
         QVERIFY(c.model().project().clips.empty());
     }
+
+    void localZoom() {
+        // "@selected add zoom animation" zooms the selected shot (and adds no clip); "zoom in and out" at the
+        // playhead; "1.5x" sets how far; "remove the zoom" takes it off and keeps the scale.
+        Project p;
+        Clip a(p.videoTracks[0].id, ClipKind::solid, 0, 4), b(p.videoTracks[0].id, ClipKind::solid, 4, 4);
+        p.clips = {a, b};
+        auto run = [](const QString& text, const MagicPointers& ptr, const Project& on) {
+            const LocalOutcome o = LocalZoom::plan(text, ptr, on);
+            return o.plan ? o.plan->result() : on;
+        };
+        QVERIFY(LocalZoom::asks(QStringLiteral("@selected add zoom animation")));
+        QVERIFY(!LocalZoom::asks(QStringLiteral("add a clip at the end")));
+        MagicPointers sel; sel.playhead = 6; sel.selected = {a.id};
+        const Project selected = run(QStringLiteral("@selected add zoom animation"), sel, p);
+        QCOMPARE(int(selected.clips.size()), 2);
+        QVERIFY(selected.clip(a.id)->transform && selected.clip(a.id)->transform->zoom);
+        QVERIFY(selected.clip(a.id)->transform->zoom->mode == ZoomMove::Mode::zoomIn);
+        QCOMPARE(selected.clip(a.id)->transform->scale, 2.0);
+        QVERIFY(!selected.clip(b.id)->transform);
+        MagicPointers none; none.playhead = 6;
+        const Project inOut = run(QStringLiteral("zoom in and out 1.5x"), none, p);
+        QVERIFY(inOut.clip(b.id)->transform && inOut.clip(b.id)->transform->zoom->mode == ZoomMove::Mode::inOut);
+        QCOMPARE(inOut.clip(b.id)->transform->scale, 1.5);
+        QVERIFY(!inOut.clip(a.id)->transform);
+        MagicPointers at; at.playhead = 1; at.selected = {a.id};
+        const Project off = run(QStringLiteral("remove the zoom"), at, selected);
+        QVERIFY(off.clip(a.id)->transform && !off.clip(a.id)->transform->zoom);
+        QCOMPARE(off.clip(a.id)->transform->scale, 2.0);
+    }
 };
 
 QTEST_MAIN(TestLocal)

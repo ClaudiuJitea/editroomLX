@@ -18,6 +18,10 @@ enum class SourceColor {
     appleLog,
     /// Apple Log 2 (iPhone 17 Pro): the same curve, in Apple Wide Gamut colours.
     appleLog2,
+    /// HLG or PQ with Dolby Vision (as iPhones write it): converted with the curve fitted to macOS's own conversion
+    /// of iPhone HDR, which uses the Dolby Vision metadata. Plain HLG and PQ keep the BT.2408 mapping.
+    hlgVision,
+    pqVision,
 };
 
 namespace SourceColors {

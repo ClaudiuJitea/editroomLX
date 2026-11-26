@@ -357,6 +357,34 @@ private slots:
         QVERIFY(std::abs(lo2 - (1.0 / 30 - 2)) < 1e-12);
         QCOMPARE(hi2, 7.0); // the file's remaining 7s
     }
+
+    void overwriteLinks() {
+        // Overwriting into the middle of a clip with its sound: both halves keep their sound linked. Over the
+        // picture only, the right half of the picture stands alone.
+        Project p;
+        const Uuid v = p.videoTracks[0].id, a = p.audioTracks[0].id, link = newUuid(), newLink = newUuid();
+        Clip longV(v, ClipKind::video, 0, 10); longV.linkID = link;
+        Clip longA(a, ClipKind::audio, 0, 10); longA.linkID = link;
+        Clip mid(v, ClipKind::video, 3, 2); mid.linkID = newLink;
+        Clip midA(a, ClipKind::audio, 3, 2); midA.linkID = newLink;
+        p.clips = {longV, longA, mid, midA};
+        p.resolveOverlaps({mid.id, midA.id});
+        std::vector<Clip> rights;
+        for (const auto& c : p.clips) if (std::abs(c.start - 5) < 1e-9) rights.push_back(c);
+        QVERIFY(p.clip(longV.id)->linkID == std::optional<Uuid>(link));
+        QVERIFY(p.clip(longA.id)->linkID == std::optional<Uuid>(link));
+        QCOMPARE(int(rights.size()), 2);
+        QVERIFY(rights[0].kind != rights[1].kind);
+        QVERIFY(rights[0].linkID && rights[0].linkID == rights[1].linkID && *rights[0].linkID != link);
+        Project q;
+        const Uuid qv = q.videoTracks[0].id, qa = q.audioTracks[0].id;
+        Clip title(qv, ClipKind::text, 3, 2);
+        Clip qV(qv, ClipKind::video, 0, 10); qV.linkID = link;
+        Clip qA(qa, ClipKind::audio, 0, 10); qA.linkID = link;
+        q.clips = {qV, qA, title};
+        q.resolveOverlaps({title.id});
+        for (const auto& c : q.clips) if (std::abs(c.start - 5) < 1e-9 && c.kind == ClipKind::video) QVERIFY(!c.linkID);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestModel)

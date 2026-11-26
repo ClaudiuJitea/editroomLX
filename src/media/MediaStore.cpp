@@ -1,6 +1,8 @@
 #include "MediaStore.h"
 #include "Stills.h"
+#include <QFile>
 #include <QFileInfo>
+#include <sys/stat.h>
 #include <set>
 
 namespace er {
@@ -8,7 +10,13 @@ namespace er {
 std::optional<FileStamp> FileStamp::of(const QString& path) {
     QFileInfo fi(path);
     if (!fi.exists()) return std::nullopt;
-    return FileStamp{fi.size(), fi.lastModified()};
+    return FileStamp{fi.size(), fi.lastModified(), fileNumber(path)};
+}
+
+quint64 FileStamp::fileNumber(const QString& path) {
+    struct stat st{};
+    if (::stat(QFile::encodeName(path).constData(), &st) != 0) return 0;
+    return quint64(st.st_ino);
 }
 
 MediaStore::MediaStore(QObject* parent) : QObject(parent) {}

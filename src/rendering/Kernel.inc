@@ -87,6 +87,126 @@ ER_INLINE vec4 er_sample(ErSource s, vec2 p) {
     return er_bilerp(a, b, c, d, f);
 }
 
+// MARK: Upscaling (export)
+//
+// The Mac enlarges video drawn bigger than its own pixels with MetalFX's spatial upscaler. Linux has no MetalFX; the
+// nearest open equivalent is AMD FidelityFX Super Resolution 1's EASU (Edge Adaptive Spatial Upsampling, MIT), ported
+// here: 12 taps around the point, the local edge direction and strength from their luma, a Lanczos-like kernel
+// stretched along the edge, and the result kept within the four nearest texels (no ringing).
+
+/// FSR's luma stand-in: green plus half of red and blue.
+ER_INLINE float er_easu_luma(vec4 c) { return c.x * 0.5 + c.z * 0.5 + c.y; }
+
+/// One 2×2 quad's contribution to the direction and length (FsrEasuSetF).
+ER_INLINE void er_easu_set(ER_INOUT(vec2) dir, ER_INOUT(float) len, float w, float lA, float lB, float lC, float lD, float lE) {
+    float dc = lD - lC;
+    float cb = lC - lB;
+    float lenX = max(abs(dc), abs(cb));
+    lenX = lenX > 0.0 ? 1.0 / lenX : 0.0;
+    float dirX = lD - lB;
+    dir.x = dir.x + dirX * w;
+    lenX = er_clamp01(abs(dirX) * lenX);
+    lenX = lenX * lenX;
+    len = len + lenX * w;
+    float ec = lE - lC;
+    float ca = lC - lA;
+    float lenY = max(abs(ec), abs(ca));
+    lenY = lenY > 0.0 ? 1.0 / lenY : 0.0;
+    float dirY = lE - lA;
+    dir.y = dir.y + dirY * w;
+    lenY = er_clamp01(abs(dirY) * lenY);
+    lenY = lenY * lenY;
+    len = len + lenY * w;
+}
+
+/// One tap (FsrEasuTapF): its weight from its offset, rotated to the edge and stretched along it.
+ER_INLINE void er_easu_tap(ER_INOUT(vec4) aC, ER_INOUT(float) aW, vec2 off, vec2 dir, vec2 len2, float lob, float clp, vec4 c) {
+    float vx = off.x * dir.x + off.y * dir.y;
+    float vy = off.x * (-dir.y) + off.y * dir.x;
+    vx = vx * len2.x;
+    vy = vy * len2.y;
+    float d2 = min(vx * vx + vy * vy, clp);
+    float wB = 0.4 * d2 - 1.0;
+    float wA = lob * d2 - 1.0;
+    wB = wB * wB;
+    wA = wA * wA;
+    wB = 1.5625 * wB - 0.5625;
+    float w = wB * wA;
+    aC = aC + c * w;
+    aW = aW + w;
+}
+
+ER_INLINE vec4 er_min4(vec4 a, vec4 b) { return vec4(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z), min(a.w, b.w)); }
+ER_INLINE vec4 er_max4(vec4 a, vec4 b) { return vec4(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z), max(a.w, b.w)); }
+
+/// The oriented picture at (x, y) (pixel units, centres at +0.5), enlarged with EASU; transparent outside.
+ER_INLINE vec4 er_sample_easu(ErSource s, vec2 p) {
+    float px = p.x - 0.5;
+    float py = p.y - 0.5;
+    float fx0 = floor(px);
+    float fy0 = floor(py);
+    int x = int(fx0);
+    int y = int(fy0);
+    vec2 pp = vec2(px - fx0, py - fy0);
+    //    b c
+    //  e f g h
+    //  i j k l
+    //    n o
+    vec4 b = er_oriented_texel(s, x, y - 1);
+    vec4 c = er_oriented_texel(s, x + 1, y - 1);
+    vec4 e = er_oriented_texel(s, x - 1, y);
+    vec4 f = er_oriented_texel(s, x, y);
+    vec4 g = er_oriented_texel(s, x + 1, y);
+    vec4 h = er_oriented_texel(s, x + 2, y);
+    vec4 i = er_oriented_texel(s, x - 1, y + 1);
+    vec4 j = er_oriented_texel(s, x, y + 1);
+    vec4 k = er_oriented_texel(s, x + 1, y + 1);
+    vec4 l = er_oriented_texel(s, x + 2, y + 1);
+    vec4 n = er_oriented_texel(s, x, y + 2);
+    vec4 o = er_oriented_texel(s, x + 1, y + 2);
+    float bL = er_easu_luma(b), cL = er_easu_luma(c), eL = er_easu_luma(e), fL = er_easu_luma(f);
+    float gL = er_easu_luma(g), hL = er_easu_luma(h), iL = er_easu_luma(i), jL = er_easu_luma(j);
+    float kL = er_easu_luma(k), lL = er_easu_luma(l), nL = er_easu_luma(n), oL = er_easu_luma(o);
+    vec2 dir = vec2(0.0);
+    float len = 0.0;
+    er_easu_set(dir, len, (1.0 - pp.x) * (1.0 - pp.y), bL, eL, fL, gL, jL);
+    er_easu_set(dir, len, pp.x * (1.0 - pp.y), cL, fL, gL, hL, kL);
+    er_easu_set(dir, len, (1.0 - pp.x) * pp.y, fL, iL, jL, kL, nL);
+    er_easu_set(dir, len, pp.x * pp.y, gL, jL, kL, lL, oL);
+    // Normalised direction; none (flat) reads as across.
+    float dirR = dir.x * dir.x + dir.y * dir.y;
+    bool zro = dirR < (1.0 / 32768.0);
+    dirR = zro ? 1.0 : 1.0 / sqrt(dirR);
+    dir.x = zro ? 1.0 : dir.x;
+    dir = dir * dirR;
+    len = len * 0.5;
+    len = len * len;
+    // Stretched along the edge, by how strong it is.
+    float stretch = (dir.x * dir.x + dir.y * dir.y) / max(abs(dir.x), abs(dir.y));
+    vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);
+    float lob = 0.5 + ((1.0 / 4.0 - 0.04) - 0.5) * len;
+    float clp = 1.0 / lob;
+    vec4 aC = vec4(0.0);
+    float aW = 0.0;
+    er_easu_tap(aC, aW, vec2(0.0, -1.0) - pp, dir, len2, lob, clp, b);
+    er_easu_tap(aC, aW, vec2(1.0, -1.0) - pp, dir, len2, lob, clp, c);
+    er_easu_tap(aC, aW, vec2(-1.0, 1.0) - pp, dir, len2, lob, clp, i);
+    er_easu_tap(aC, aW, vec2(0.0, 1.0) - pp, dir, len2, lob, clp, j);
+    er_easu_tap(aC, aW, vec2(0.0, 0.0) - pp, dir, len2, lob, clp, f);
+    er_easu_tap(aC, aW, vec2(-1.0, 0.0) - pp, dir, len2, lob, clp, e);
+    er_easu_tap(aC, aW, vec2(1.0, 1.0) - pp, dir, len2, lob, clp, k);
+    er_easu_tap(aC, aW, vec2(2.0, 1.0) - pp, dir, len2, lob, clp, l);
+    er_easu_tap(aC, aW, vec2(2.0, 0.0) - pp, dir, len2, lob, clp, h);
+    er_easu_tap(aC, aW, vec2(1.0, 0.0) - pp, dir, len2, lob, clp, g);
+    er_easu_tap(aC, aW, vec2(1.0, 2.0) - pp, dir, len2, lob, clp, o);
+    er_easu_tap(aC, aW, vec2(0.0, 2.0) - pp, dir, len2, lob, clp, n);
+    // Kept within the four nearest texels, so edges don't ring.
+    vec4 lo = er_min4(er_min4(f, g), er_min4(j, k));
+    vec4 hi = er_max4(er_max4(f, g), er_max4(j, k));
+    vec4 r = aW != 0.0 ? aC / aW : f;
+    return er_min4(hi, er_max4(lo, r));
+}
+
 ER_INLINE vec3 er_cube_at(int base, int n, int r, int g, int b) {
     int i = base + er_cube_index(r, g, b, n) * 4;
     return vec3(er_cubef(i), er_cubef(i + 1), er_cubef(i + 2));
@@ -125,7 +245,9 @@ ER_INLINE vec4 er_layer_color(ErLayer L, vec2 P, ErFrame F) {
         c = er_sample(er_source(L.source), vec2(q.x - float(L.pixX), q.y - float(L.pixY)));
     } else {
         ErSource s = er_source(L.source);
-        c = er_sample(s, vec2((q.x - L.fitX) / L.fitScale, (q.y - L.fitY) / L.fitScale));
+        vec2 sp = vec2((q.x - L.fitX) / L.fitScale, (q.y - L.fitY) / L.fitScale);
+        // Video drawn bigger than its own pixels, on export: enlarged with detail rebuilt rather than stretched.
+        c = L.upscale != 0 ? er_sample_easu(s, sp) : er_sample(s, sp);
         // HDR and Log to Rec.709, after scaling (SourceColor.toRec709).
         c = er_apply_cube(c, L.colorCube, 64);
     }

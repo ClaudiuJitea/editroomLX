@@ -1,5 +1,5 @@
 {
- "mac": "7b7b865",
+ "mac": "",
  "strings": {
   "+\\(queue.waiting)": {
    "mac": [
@@ -81,6 +81,11 @@
     "UI/TimelinePanel.swift"
    ]
   },
+  "Add to Media": {
+   "mac": [
+    "UI/LibraryView.swift"
+   ]
+  },
   "Add to Timeline": {
    "mac": [
     "UI/LibraryView.swift"
@@ -109,6 +114,11 @@
   "Automatically download and install updates in the future": {
    "mac": [
     "App/UpdateDriver.swift"
+   ]
+  },
+  "Being written by the app it came from (Photos may be fetching it from iCloud). Delete cancels it.": {
+   "mac": [
+    "UI/LibraryView.swift"
    ]
   },
   "Bold": {
@@ -231,6 +241,11 @@
     "UI/MagicPopover.swift"
    ]
   },
+  "Connect another AI app": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
   "Connected apps use your own Claude or ChatGPT plan; no API key needed. Disconnecting stops Editroom answering that app, for Magic and for edits you ask for in the app.": {
    "mac": [
     "UI/SettingsView.swift"
@@ -249,6 +264,11 @@
   "Copy Grade": {
    "mac": [
     "App/EditroomApp.swift"
+   ]
+  },
+  "Copy Prompt": {
+   "mac": [
+    "UI/SettingsView.swift"
    ]
   },
   "Couldn't download it: \\(error.localizedDescription)": {
@@ -342,11 +362,6 @@
   "Drag to tint \\(title.lowercased()). Double-click to reset.": {
    "mac": [
     "UI/InspectorView.swift"
-   ]
-  },
-  "Drop to import": {
-   "mac": [
-    "UI/ContentView.swift"
    ]
   },
   "Duck Under": {
@@ -532,12 +547,12 @@
     "UI/LibraryView.swift"
    ]
   },
-  "In to out · ": {
+  "Importing…": {
    "mac": [
-    "UI/ExportSheet.swift"
+    "UI/LibraryView.swift"
    ]
   },
-  "Include audio": {
+  "In to out · ": {
    "mac": [
     "UI/ExportSheet.swift"
    ]
@@ -677,6 +692,11 @@
   "No API key needed": {
    "mac": [
     "UI/MagicPopover.swift"
+   ]
+  },
+  "No audio": {
+   "mac": [
+    "UI/ExportSheet.swift"
    ]
   },
   "No fonts match": {
@@ -819,6 +839,11 @@
   "Restore Defaults": {
    "mac": [
     "UI/SettingsView.swift"
+   ]
+  },
+  "Reveal in Media": {
+   "mac": [
+    "App/EditroomApp.swift"
    ]
   },
   "Reverse": {
@@ -1109,9 +1134,19 @@
     "UI/MagicPopover.swift"
    ]
   },
+  "Upscaled from \\(min(p.width, p.height))p": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
   "Use an https link to the audio file.": {
    "mac": [
     "MCP/MediaDownload.swift"
+   ]
+  },
+  "Using a different AI app? Copy this prompt and paste it in, and it connects itself and can start editing.": {
+   "mac": [
+    "UI/SettingsView.swift"
    ]
   },
   "Video": {

@@ -1,4 +1,7 @@
 #include "TimelinePanel.h"
+#include <QDropEvent>
+#include <QDragEnterEvent>
+#include <QCoreApplication>
 #include "ExportDialog.h"
 #include "LevelMeter.h"
 #include "Symbols.h"
@@ -366,6 +369,8 @@ class TrackHeaders : public QWidget {
 public:
     TrackHeaders(Controller& c, TimelineCanvas& canvas, QWidget* parent) : QWidget(parent), c_(c), canvas_(canvas) {
         setFixedWidth(int(TimelineLayout::headerWidth));
+        // A drop over the headers is handed to the timeline, and lands at the start of that row.
+        setAcceptDrops(true);
         corner_ = new QWidget(this);
         connect(&c_.model(), &EditorModel::changed, this, &TrackHeaders::rebuildIfNeeded);
         connect(&c_.model(), &EditorModel::selectionChanged, this, [this] { for (auto* w : findChildren<QWidget*>()) w->update(); });
@@ -380,6 +385,24 @@ protected:
     void resizeEvent(QResizeEvent*) override { place(); }
     // The track headers sit beside the timeline; scrolling over them scrolls the timeline too.
     void wheelEvent(QWheelEvent* e) override { canvas_.scrollBy(e); }
+    // Drags over the headers: handed to the timeline, at the same height (left of its first frame).
+    QPointF onCanvas(QPointF p) const { return QPointF(canvas_.mapFromGlobal(mapToGlobal(p.toPoint()))); }
+    void dragEnterEvent(QDragEnterEvent* e) override {
+        QDragEnterEvent f(onCanvas(e->position()).toPoint(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers());
+        QCoreApplication::sendEvent(&canvas_, &f);
+        if (f.isAccepted()) e->acceptProposedAction(); else e->ignore();
+    }
+    void dragMoveEvent(QDragMoveEvent* e) override {
+        QDragMoveEvent f(onCanvas(e->position()).toPoint(), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers());
+        QCoreApplication::sendEvent(&canvas_, &f);
+        if (f.isAccepted()) e->acceptProposedAction(); else e->ignore();
+    }
+    void dragLeaveEvent(QDragLeaveEvent* e) override { QCoreApplication::sendEvent(&canvas_, e); }
+    void dropEvent(QDropEvent* e) override {
+        QDropEvent f(onCanvas(e->position()), e->possibleActions(), e->mimeData(), e->buttons(), e->modifiers());
+        QCoreApplication::sendEvent(&canvas_, &f);
+        if (f.isAccepted()) e->acceptProposedAction();
+    }
 private:
     struct Row { QWidget* widget; Uuid track; };
 

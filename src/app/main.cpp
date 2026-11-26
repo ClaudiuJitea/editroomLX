@@ -229,6 +229,7 @@ int main(int argc, char** argv) {
             for (const auto& c : list) names << c.name;
             return names;
         },
+        [&mcp] { return mcp.endpoint(); },
     };
     QObject::connect(&window, &er::MainWindow::magicRequested, &window, [&] {
         auto* pop = new er::MagicPopover(controller, agent, &window);

@@ -189,7 +189,15 @@ void Viewer::drawEmptyPrompt(QPainter& p, const QRectF& area) {
     p.drawRoundedRect(box.adjusted(0.75, 0.75, -0.75, -0.75), 16, 16);
     // The film frame and the arrow, on a 74-wide grid, 96 × 70.
     const QFont title = Theme::font(13, 600), sub = Theme::font(11.5);
-    const double total = 70 + 16 + QFontMetricsF(title).height() + 16 + QFontMetricsF(sub).height();
+    const QString titleText = hasMedia ? QStringLiteral("Drag media from the library to the timeline") : QStringLiteral("Drop video, audio or images anywhere");
+    const QString subText = hasMedia ? QStringLiteral("or double-click it to add it at the playhead")
+                                     : QStringLiteral("or press Ctrl+I to import  ·  MP4, MOV, MKV, WebM, WAV, MP3, JPG, PNG");
+    // Centred when they wrap (a vertical frame is narrow), and kept off the dashed edge.
+    const QRectF textArea = box.adjusted(22, 0, -22, 0);
+    const int wrap = Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap;
+    const double titleH = QFontMetricsF(title).boundingRect(QRectF(0, 0, textArea.width(), 1e4), wrap, titleText).height();
+    const double subH = QFontMetricsF(sub).boundingRect(QRectF(0, 0, textArea.width(), 1e4), wrap, subText).height();
+    const double total = 70 + 16 + titleH + 16 + subH;
     const QRectF art(box.center().x() - 48, box.center().y() - total / 2, 96, 70);
     const double s = art.width() / 74;
     auto pt = [&](double x, double y) { return QPointF(art.left() + x * s, art.top() + y * s); };
@@ -210,14 +218,12 @@ void Viewer::drawEmptyPrompt(QPainter& p, const QRectF& area) {
     double y = art.bottom() + 16;
     p.setFont(title);
     p.setPen(text);
-    p.drawText(QRectF(area.left(), y, area.width(), QFontMetricsF(title).height()), Qt::AlignHCenter | Qt::AlignTop,
-               hasMedia ? QStringLiteral("Drag media from the library to the timeline") : QStringLiteral("Drop video, audio or images anywhere"));
-    y += QFontMetricsF(title).height() + 16;
+    p.drawText(QRectF(textArea.left(), y, textArea.width(), titleH), wrap, titleText);
+    y += titleH + 16;
     p.setFont(sub);
     p.setPen(faint);
-    p.drawText(QRectF(area.left(), y, area.width(), QFontMetricsF(sub).height()), Qt::AlignHCenter | Qt::AlignTop,
-               hasMedia ? QStringLiteral("or double-click it to add it at the playhead")
-                        : QStringLiteral("or press Ctrl+I to import  ·  MP4, MOV, MKV, WebM, WAV, MP3, JPG, PNG"));
+    p.drawText(QRectF(textArea.left(), y, textArea.width(), subH), wrap, subText);
+    (void)area;
 }
 
 void Viewer::paintEvent(QPaintEvent*) {
@@ -233,7 +239,11 @@ void Viewer::paintEvent(QPaintEvent*) {
     p.save();
     p.setClipPath(clip);
     p.fillRect(r, Qt::black);
-    if (!frame_.isNull() && !proj.clips.empty()) p.drawImage(r, frame_);
+    // Only a frame of the viewer's own shape: one made for the sequence's old shape (it went from vertical to wide,
+    // say) would be stretched to fill, so the viewer is black for that moment instead.
+    const bool fits = !frame_.isNull() && r.height() > 0 && frame_.height() > 0
+        && std::abs((double(frame_.width()) / frame_.height()) / (r.width() / r.height()) - 1) < 0.02;
+    if (fits && !proj.clips.empty()) p.drawImage(r, frame_);
     // A library item being hover-scrubbed, or a trimmed edge's frame, shows here, labelled so it isn't mistaken
     // for the edit. Until its first frame is decoded, the viewer's own picture stays showing underneath.
     const auto& s = c_.sourcePreview().current();

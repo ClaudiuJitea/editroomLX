@@ -1,4 +1,5 @@
 #include "MCPServer.h"
+#include <QJsonArray>
 #include "MCPTools.h"
 #include "model/Json.h"
 #include <QCoreApplication>
@@ -34,7 +35,17 @@ std::optional<QJsonObject> MCPHandler::handshake(const QJsonObject& req) {
     }
     if (method == QLatin1String("ping")) return ok(QJsonObject{});
     if (method == QLatin1String("tools/list")) return ok(QJsonObject{{"tools", MCPTools::definitions()}});
+    // Asked by some agents as they start (Codex): Editroom has neither, and saying so mustn't open it.
+    if (method == QLatin1String("resources/list")) return ok(QJsonObject{{"resources", QJsonArray{}}});
+    if (method == QLatin1String("resources/templates/list")) return ok(QJsonObject{{"resourceTemplates", QJsonArray{}}});
+    if (method == QLatin1String("prompts/list")) return ok(QJsonObject{{"prompts", QJsonArray{}}});
     return std::nullopt;
+}
+
+bool MCPHandler::isStartup(const QString& method) {
+    static const QStringList startup = {QStringLiteral("initialize"), QStringLiteral("ping"), QStringLiteral("tools/list"), QStringLiteral("resources/list"),
+                                        QStringLiteral("resources/templates/list"), QStringLiteral("prompts/list")};
+    return startup.contains(method) || method.startsWith(QLatin1String("notifications/"));
 }
 
 MCPServer::MCPServer(Controller& c, QObject* parent) : QObject(parent), c_(c) {
@@ -204,7 +215,9 @@ int runMCPBridge(int argc, char** argv) {
         const QJsonObject json = QJsonDocument::fromJson(data).object();
         const QString method = json.value("method").toString();
         const bool hasId = json.contains("id");
-        if (method == QLatin1String("initialize") || method == QLatin1String("ping") || method == QLatin1String("tools/list") || method.startsWith(QLatin1String("notifications/"))) {
+        // Hello, ping, the lists of tools (and of resources and prompts, which it has none of) and notifications:
+        // Editroom's own answer if it's open; this one, and no opening it, if it's closed.
+        if (MCPHandler::isStartup(method)) {
             auto [status, body] = post(data, session, from);
             QByteArray reply;
             if (status == 200) reply = body;

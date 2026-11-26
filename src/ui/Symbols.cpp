@@ -269,6 +269,11 @@ const std::map<QString, Draw>& table() {
             k.line(-0.42, -0.25, -0.42, -0.1);
             k.line(0.42, -0.25, 0.42, -0.1);
         }},
+        {"arrow.down.to.line", [](const Ctx& k) {
+            k.line(0, -0.9, 0, 0.35);
+            k.head(0, 0.4, 0, 1, 0.4);
+            k.line(-0.7, 0.85, 0.7, 0.85);
+        }},
         {"arrow.down", [](const Ctx& k) {
             k.line(0, -0.85, 0, 0.8);
             k.head(0, 0.85, 0, 1, 0.45);

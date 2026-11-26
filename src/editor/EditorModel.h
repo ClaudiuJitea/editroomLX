@@ -68,6 +68,13 @@ public:
     void clickMedia(const MediaPick& pick, const std::vector<MediaPick>& order, Qt::KeyboardModifiers modifiers);
     /// Opens a folder in the Media panel (nullopt: the top).
     void openMediaFolder(const std::optional<QString>& folder);
+    /// Nothing picked in Media (after a drop on the timeline, say: the new clips there are what's picked).
+    void clearMediaPicks();
+    /// The library item behind the clip selected on the timeline (the first, if several), for Reveal in Media.
+    const MediaAsset* revealableAsset() const;
+    /// Reveal in Media (Shift+F, as Final Cut's Reveal in Browser): the clip's file is opened in Media, in its
+    /// folder, picked and scrolled to. The timeline's selection is left as it is.
+    void revealInMedia(const std::optional<Uuid>& clipID = std::nullopt);
 
     // View settings kept in QSettings under the Mac's keys.
     Tool tool = Tool::move;
@@ -306,6 +313,9 @@ public:
 
     /// Applies a library change made outside undo (import, relink): the library isn't undone.
     void changeLibrary(const std::function<void(Project&)>& body, bool clearUndo = false);
+    /// Items whose file was deleted from a linked folder (and that no clip uses) leave Media, as from the folder;
+    /// Undo doesn't bring them back.
+    void dropDeletedFromDisk(const IdSet& gone);
 
 signals:
     void changed();
@@ -317,6 +327,8 @@ signals:
     void viewerOnlyChanged(bool on);
     /// The Media panel's picks or open folder changed.
     void mediaSelectionChanged();
+    /// Something the Media panel should scroll to (what was just imported, or revealed).
+    void mediaRevealRequested(const MediaPick& target);
     void editingMarkerChanged();
     /// Zoom, scroll or row height changed.
     void viewChanged();
@@ -337,6 +349,8 @@ private:
     std::optional<QString> recoveryFor() const;
     void setRecoveryFor(const std::optional<QString>& v);
     static void keepFolders(Project& p, const Project& now, const std::set<Uuid>& importing);
+    /// Items taken out because their file was deleted from a linked folder: Undo doesn't bring them back.
+    std::set<Uuid> droppedFromDisk_;
     static std::vector<MediaAsset> restoring(const std::vector<MediaAsset>& earlier, const std::vector<MediaAsset>& now);
 
     EditorHost nullHost_;

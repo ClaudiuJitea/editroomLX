@@ -1,4 +1,5 @@
 #include "RenderPlan.h"
+#include <set>
 #include "model/Codec.h"
 #include "model/Json.h"
 #include <QFont>
@@ -152,6 +153,15 @@ std::optional<RenderPlan> CompositionBuilder::build(const Project& project, cons
     QByteArray key = codec::compactBytes(SavedDocument{1, project, {}});
     key += QByteArray::number(o.renderW) + 'x' + QByteArray::number(o.renderH);
     if (o.reframe) key += QByteArray::number(o.reframe->first, 'g', 17) + ',' + QByteArray::number(o.reframe->second, 'g', 17);
+    if (o.upscale) key += "+up";
+    // The file each item has open: reloaded from disk (a rotated copy saved over it), it's a new one, so the player
+    // builds afresh instead of keeping what it made from the old file.
+    {
+        std::set<Uuid> seen;
+        for (const auto& c : project.clips)
+            if (c.assetID && seen.insert(*c.assetID).second) key += '#' + QByteArray::number(quintptr(media.runtime(*c.assetID)));
+    }
+    plan.upscale = o.upscale;
     plan.signature = fnv(key);
     return plan;
 }
@@ -214,6 +224,7 @@ FrameJob describeFrame(const RenderPlan& plan, double t, const FrameProvider& fr
             L.kind = ER_LAYER_PICTURE;
             L.source = addSource(pic);
             fit(L, pic.displayWidth(), pic.displayHeight());
+            L.upscale = plan.upscale && L.fitScale > 1.01f ? 1 : 0;
             // After scaling, so a 4K source is converted at the output's size.
             L.colorCube = addCube(SourceColors::cube(layer.color));
             break;

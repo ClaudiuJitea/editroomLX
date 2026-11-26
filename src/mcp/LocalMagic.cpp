@@ -351,6 +351,13 @@ void LocalMagic::run(const QString& typedWithMarkers) {
         });
         return;
     }
+    // A zoom on a shot ("@selected add a zoom", "push in"): before adding clips, so "add" here isn't a new clip.
+    if (LocalZoom::asks(r)) {
+        const LocalOutcome outcome = LocalZoom::plan(typed, pointers, p);
+        if (QCoreApplication::arguments().contains(QStringLiteral("--magic-local")))
+            fprintf(stderr, "MAGIC LOCAL zoom: %s (%d edits)\n", qPrintable(outcome.said), outcome.plan ? int(outcome.plan->tasks.size()) : 0);
+        return perform(outcome);
+    }
     // More than one thing asked: all of them, in turn.
     const auto parts = LocalCombined::parts(r, p);
     if (parts.size() > 1) {

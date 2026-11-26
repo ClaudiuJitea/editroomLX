@@ -1,4 +1,5 @@
 #include "Waveform.h"
+#include <sys/stat.h>
 #include "media/Decoder.h"
 #include <QDateTime>
 #include <QDir>
@@ -22,7 +23,11 @@ QString WaveformReader::cacheName(const QString& source) {
     // Swift interpolates the Date as "2026-11-25 19:33:00 +0000".
     const QString date = fi.exists() ? fi.lastModified().toUTC().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) + QStringLiteral(" +0000")
                                      : QStringLiteral("0001-01-01 00:00:00 +0000");
-    const QByteArray stamp = (source + u'|' + QString::number(fi.exists() ? fi.size() : 0) + u'|' + date).toUtf8();
+    // The file's number on its disk too: one replaced by another of the same name, size and date (a rotated copy)
+    // is a new file, so its frames and sound are made again rather than the old ones shown.
+    struct stat st{};
+    const quint64 number = fi.exists() && ::stat(QFile::encodeName(source).constData(), &st) == 0 ? quint64(st.st_ino) : 0;
+    const QByteArray stamp = (source + u'|' + QString::number(fi.exists() ? fi.size() : 0) + u'|' + date + u'|' + QString::number(number)).toUtf8();
     uint64_t hash = 0xcbf29ce484222325ull;
     for (char b : stamp) hash = (hash ^ uint8_t(b)) * 0x100000001b3ull;
     return fi.completeBaseName() + u'-' + QString::number(hash, 36);

@@ -90,6 +90,8 @@ struct RenderPlan {
     std::vector<PlanLayer> layers;
     std::vector<CaptionPlanLayer> captions;
     uint64_t signature = 0;
+    /// Video drawn bigger than its own pixels is enlarged with the upscaler (on export), not just stretched.
+    bool upscale = false;
 
     bool isEmpty() const { return duration <= 0; }
 };
@@ -100,6 +102,8 @@ struct BuildOptions {
     std::optional<std::pair<double, double>> reframe;
     /// The player keeps hidden tracks out of the picture but in the plan's signature.
     bool keepAllTracks = false;
+    /// Export: video drawn bigger than its pixels (a 1080p sequence at 4K) is upscaled, not stretched.
+    bool upscale = false;
 };
 
 namespace CompositionBuilder {

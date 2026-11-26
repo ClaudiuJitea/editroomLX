@@ -128,6 +128,9 @@ private:
     Drag drag_;
     std::map<Uuid, Clip> overrides_;
     std::vector<Clip> ghosts_;
+    /// Files being dragged in from another app: their name, shown on the drop's outline (it has no library item
+    /// yet, which would otherwise read "Missing").
+    std::optional<QString> fileGhostLabel_;
     std::optional<std::pair<Uuid, Zone>> hover_;
     std::optional<double> snapLine_;
     std::optional<double> scrubReadout_;

@@ -60,8 +60,10 @@ SourceColor colorOf(const AVFormatContext* fmt, const AVStream* s) {
         return 0;
     };
     if (int l = std::max(hasLog(s->metadata), hasLog(fmt->metadata))) return l == 2 ? SourceColor::appleLog2 : SourceColor::appleLog;
-    if (s->codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67) return SourceColor::hlg;
-    if (s->codecpar->color_trc == AVCOL_TRC_SMPTE2084) return SourceColor::pq;
+    // Dolby Vision (an iPhone's HDR carries a profile 8.4 configuration): converted as macOS does it for those.
+    const bool vision = av_packet_side_data_get(s->codecpar->coded_side_data, s->codecpar->nb_coded_side_data, AV_PKT_DATA_DOVI_CONF) != nullptr;
+    if (s->codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67) return vision ? SourceColor::hlgVision : SourceColor::hlg;
+    if (s->codecpar->color_trc == AVCOL_TRC_SMPTE2084) return vision ? SourceColor::pqVision : SourceColor::pq;
     return SourceColor::standard;
 }
 

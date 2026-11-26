@@ -57,8 +57,16 @@ const Matrix& rec2020To709() { static const Matrix m = convertPrimaries(rec2020,
 const Matrix& wideGamutTo709() { static const Matrix m = convertPrimaries(appleWideGamut, rec709Primaries); return m; }
 
 constexpr double knee = 0.9;
+/// Where HDR's reference white lands in SDR linear light, and where its highlights start easing.
+constexpr double hdrGain = 0.317;
+constexpr double hdrPower = 0.88;
+constexpr double hdrLift = 0.0143;
+constexpr double hdrKnee = 0.85;
+constexpr double hdrSaturation = 0.88;
 
 double decode(SourceColor kind, double v) {
+    if (kind == SourceColor::hlgVision) kind = SourceColor::hlg;
+    if (kind == SourceColor::pqVision) kind = SourceColor::pq;
     switch (kind) {
     case SourceColor::standard: return v;
     case SourceColor::hlg: {
@@ -74,6 +82,9 @@ double decode(SourceColor kind, double v) {
         const double y = std::pow(std::max(0.0, p - c1) / (c2 - c3 * p), 1 / m1);
         return y * 10000 / 203;
     }
+    case SourceColor::hlgVision:
+    case SourceColor::pqVision:
+        break;
     case SourceColor::appleLog:
     case SourceColor::appleLog2: {
         // Apple Log (and Log 2, which shares the curve) to scene light (18% grey = 0.18), from Apple's published curve.
@@ -100,11 +111,30 @@ std::tuple<double, double, double> SourceColors::convert(SourceColor kind, doubl
     const Matrix& m = kind == SourceColor::appleLog2 ? wideGamutTo709() : rec2020To709();
     double c[3];
     for (int i = 0; i < 3; ++i) c[i] = std::max(0.0, m[i][0] * lin[0] + m[i][1] * lin[1] + m[i][2] * lin[2]);
-    // Brighter than white rolls off smoothly instead of clipping; scaling all three channels
-    // together keeps the hue.
+    // iPhone HDR (HLG or PQ with Dolby Vision) is compressed into SDR the way macOS does it: 0.317 × light^0.88 + 0.014,
+    // fitted to macOS's own frames of iPhone HLG (within about 2% from shadows to highlights; the small lift fades out
+    // toward black, so black stays black). The far greater range above white (sun, sky, lit skin) has room instead of
+    // being squeezed into the last few percent, which made outdoor iPhone video look blown out. The Mac now has
+    // AVFoundation convert HDR as it's read, steered by the Dolby Vision metadata; Linux has no such engine, so this
+    // curve, fitted to its output, is the nearest match. HDR without Dolby Vision (BT.2408 graded, as the test patches)
+    // is converted by AVFoundation with white at white, which the plain mapping below already does.
+    const bool hdr = kind == SourceColor::hlgVision || kind == SourceColor::pqVision;
+    if (hdr) {
+        const double y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        if (y > 1e-6) {
+            const double target = hdrGain * std::pow(y, hdrPower) + hdrLift * std::min(1.0, y / 0.02);
+            const double scale = target / y;
+            for (double& x : c) x *= scale;
+            // Darkened, colours read richer than they did; eased a little toward grey, as macOS's conversion is.
+            const double g = y * scale;
+            for (double& x : c) x = g + (x - g) * hdrSaturation;
+        }
+    }
+    // Brighter than white rolls off smoothly instead of clipping; scaling all three channels together keeps the
+    // hue. HDR starts easing sooner, with more to fit in.
+    const double k = hdr ? hdrKnee : knee;
     const double peak = std::max({c[0], c[1], c[2]});
-    if (peak > knee) {
-        const double k = knee;
+    if (peak > k) {
         const double eased = k + (1 - k) * (1 - std::exp(-(peak - k) / (1 - k)));
         for (double& x : c) x = x * eased / peak;
     }
@@ -114,7 +144,7 @@ std::tuple<double, double, double> SourceColors::convert(SourceColor kind, doubl
 std::shared_ptr<const std::vector<float>> SourceColors::cube(SourceColor kind) {
     if (kind == SourceColor::standard) return nullptr;
     static std::mutex lock;
-    static std::shared_ptr<const std::vector<float>> cubes[5];
+    static std::shared_ptr<const std::vector<float>> cubes[7];
     std::lock_guard g(lock);
     auto& slot = cubes[int(kind)];
     if (slot) return slot;
@@ -138,6 +168,8 @@ const char* SourceColors::name(SourceColor kind) {
     case SourceColor::pq: return "pq";
     case SourceColor::appleLog: return "appleLog";
     case SourceColor::appleLog2: return "appleLog2";
+    case SourceColor::hlgVision: return "hlgVision";
+    case SourceColor::pqVision: return "pqVision";
     }
     return "?";
 }

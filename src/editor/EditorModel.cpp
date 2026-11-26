@@ -56,6 +56,8 @@ void EditorModel::setSelection(const IdSet& s) {
         captionSelection_.clear();
         captionsFocused_ = false;
     }
+    // Clips picked on the timeline (a click, Select All, a drop): Media lets go of its picks, so Delete is for the clips.
+    if (!selection_.empty()) clearMediaPicks();
     emit selectionChanged();
 }
 
@@ -274,11 +276,61 @@ void EditorModel::undo() {
     redoKnown_.push_back(known);
     // The library isn't undone (imports and relinks stay), except that items a step deleted come back.
     prev.assets = restoring(prev.assets, project_.assets);
+    // Except items whose file was deleted from a linked folder, unless this step's clips use them.
+    {
+        std::set<Uuid> usedThen;
+        for (const auto& c : prev.clips) if (c.assetID) usedThen.insert(*c.assetID);
+        std::erase_if(prev.assets, [&](const MediaAsset& a) { return droppedFromDisk_.count(a.id) && !usedThen.count(a.id); });
+    }
     keepFolders(prev, project_, importingFolders_);
     // Magic's prompt history isn't undone either.
     prev.magicHistory = project_.magicHistory;
     project_ = std::move(prev);
     didChange();
+}
+
+void EditorModel::clearMediaPicks() {
+    if (mediaSelection.empty() && folderSelection.empty()) return;
+    mediaSelection.clear();
+    folderSelection.clear();
+    emit mediaSelectionChanged();
+}
+
+const MediaAsset* EditorModel::revealableAsset() const {
+    std::vector<const Clip*> picked;
+    for (const auto& c : project_.clips) if (selection_.count(c.id)) picked.push_back(&c);
+    std::stable_sort(picked.begin(), picked.end(), [](const Clip* a, const Clip* b) { return a->start < b->start; });
+    for (const Clip* c : picked) if (c->assetID) if (const MediaAsset* a = project_.asset(c->assetID)) return a;
+    return nullptr;
+}
+
+void EditorModel::revealInMedia(const std::optional<Uuid>& clipID) {
+    const MediaAsset* asset = nullptr;
+    if (clipID) if (const Clip* c = project_.clip(*clipID); c && c->assetID) asset = project_.asset(c->assetID);
+    if (!asset) asset = revealableAsset();
+    if (!asset) return;
+    const Uuid id = asset->id;
+    openMediaFolder(MediaTree(project_).folderOf(*asset));
+    mediaSelection = {id};
+    folderSelection.clear();
+    mediaAnchor = MediaPick::ofAsset(id);
+    emit mediaSelectionChanged();
+    emit mediaRevealRequested(MediaPick::ofAsset(id));
+}
+
+void EditorModel::dropDeletedFromDisk(const IdSet& gone) {
+    if (gone.empty()) return;
+    commitLive();
+    changeLibrary([&](Project& p) { std::erase_if(p.assets, [&](const MediaAsset& a) { return gone.count(a.id) > 0; }); });
+    droppedFromDisk_.insert(gone.begin(), gone.end());
+    for (const auto& id : gone) mediaSelection.erase(id);
+    if (mediaFolder) {
+        const MediaTree tree(project_);
+        std::optional<QString> up = mediaFolder;
+        while (up && !tree.exists(*up)) up = tree.root(*up) ? std::optional<QString>(QFileInfo(*up).path()) : std::nullopt;
+        if (up != mediaFolder) openMediaFolder(up);
+    }
+    emit mediaSelectionChanged();
 }
 
 void EditorModel::keepFolders(Project& p, const Project& now, const std::set<Uuid>& importing) {
@@ -962,6 +1014,8 @@ void EditorModel::selectAll() {
     IdSet all;
     for (const auto& c : project_.clips) all.insert(c.id);
     setSelection(all);
+    // Even when every clip was already picked (so the selection didn't change): Media lets go.
+    clearMediaPicks();
 }
 
 // MARK: Captions

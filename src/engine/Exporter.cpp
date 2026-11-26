@@ -50,6 +50,8 @@ ExportResult runExport(const Project& whole, MediaStore& media, SoundStore& soun
         o.renderW = w;
         o.renderH = h;
         if (settings.crops(project)) o.reframe = std::make_pair(settings.reframeX, settings.reframeY);
+        // Video drawn bigger than its pixels (a 1080p sequence at 4K) is upscaled, not stretched.
+        o.upscale = true;
         plan = CompositionBuilder::build(project, media, o);
         if (!plan) { res.error = QStringLiteral("The timeline is empty."); return res; }
         WriterSettings::Video v;

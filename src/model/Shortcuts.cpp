@@ -87,6 +87,7 @@ const Row rows[] = {
     {A::delete_, "delete", "Delete", "Clip"}, {A::rippleDelete, "rippleDelete", "Ripple Delete", "Clip"},
     {A::rippleTrimStart, "rippleTrimStart", "Ripple Trim Start to Playhead", "Clip"},
     {A::rippleTrimEnd, "rippleTrimEnd", "Ripple Trim End to Playhead", "Clip"}, {A::addText, "addText", "Add Text", "Clip"},
+    {A::revealInMedia, "revealInMedia", "Reveal in Media", "Clip"},
     {A::addMarker, "addMarker", "Add Marker", "Mark"}, {A::setIn, "setIn", "Set In", "Mark"},
     {A::setOut, "setOut", "Set Out", "Mark"}, {A::clearInOut, "clearInOut", "Clear In and Out", "Mark"},
     {A::zoomIn, "zoomIn", "Zoom In", "View"}, {A::zoomOut, "zoomOut", "Zoom Out", "View"},
@@ -159,6 +160,8 @@ std::vector<KeyCombo> Shortcut::defaults(A a) {
     case A::rippleTrimStart: return {key("q")};
     case A::rippleTrimEnd: return {key("w")};
     case A::addText: return {cmd("t")};
+    // As in Final Cut Pro (Reveal in Browser).
+    case A::revealInMedia: return {KeyCombo(QStringLiteral("f"), false, true)};
     case A::addMarker: return {key("m")};
     case A::setIn: return {key("i")};
     case A::setOut: return {key("o")};

@@ -8,7 +8,10 @@
 #include "editor/EditorModel.h"
 #include "model/Timecode.h"
 #include <QAbstractButton>
+#include <QClipboard>
 #include <QCoreApplication>
+#include <QGraphicsOpacityEffect>
+#include <QGuiApplication>
 #include <QDesktopServices>
 #include <QLocale>
 #include <QFile>
@@ -196,6 +199,48 @@ QWidget* toggleRow(const QString& title, QLabel** note, Switch* sw, bool boxed) 
     left->addWidget(*note);
     h->addLayout(left, 1);
     h->addWidget(sw, 0, Qt::AlignTop);
+    return row;
+}
+
+/// For AI apps without a Connect button: one prompt to paste into them, which they follow to connect and start.
+QString ownAgentPrompt() {
+    // An AppImage runs from a temporary mount: the launcher to name is the AppImage itself.
+    const QString appImage = qEnvironmentVariable("APPIMAGE");
+    const QString launcher = appImage.isEmpty() ? QCoreApplication::applicationFilePath() : appImage;
+    const QString endpoint = SettingsDialog::server().endpoint ? SettingsDialog::server().endpoint() : QStringLiteral("http://127.0.0.1:47920/mcp");
+    return QStringLiteral("Connect to Editroom, the video editor on my computer, and edit only through its MCP tools (never screenshots or clicks). "
+                          "Its MCP server runs as the command \"%1\" with the argument --mcp (stdio; it opens Editroom when needed), "
+                          "or at %2 (Streamable HTTP) while Editroom is open. Add it to your MCP settings as \"editroom\" "
+                          "(or use the entry if it's already there). Until its tools appear in a new session, call the address directly. "
+                          "Then call get_project and list_media, and follow the instructions Editroom sends when you connect.")
+        .arg(launcher, endpoint);
+}
+
+QWidget* ownAgentRow() {
+    auto* row = new QWidget;
+    row->setObjectName(QStringLiteral("ownAgent"));
+    row->setAttribute(Qt::WA_StyledBackground);
+    row->setStyleSheet(QStringLiteral("#ownAgent { background: %1; border-radius: 9px; }").arg(Theme::field().name()));
+    auto* h = new QHBoxLayout(row);
+    h->setContentsMargins(14, 14, 14, 14);
+    h->setSpacing(16);
+    auto* left = new QVBoxLayout;
+    left->setSpacing(3);
+    left->addWidget(text(QStringLiteral("Connect another AI app"), 13, Theme::text(), 600));
+    left->addWidget(text(QStringLiteral("Using a different AI app? Copy this prompt and paste it in, and it connects itself and can start editing."),
+                         11.5, Theme::textDim(), 400, true));
+    h->addLayout(left, 1);
+    auto* button = new PillButton(QStringLiteral("Copy Prompt"));
+    // Always as wide as "Copy Prompt", so the note beside it doesn't rewrap when it says "Copied".
+    button->setFixedWidth(button->sizeHint().width());
+    button->setObjectName(QStringLiteral("copyPrompt"));
+    QObject::connect(button, &QPushButton::clicked, button, [button] {
+        QGuiApplication::clipboard()->setText(ownAgentPrompt());
+        button->setText(QStringLiteral("Copied"));
+        QTimer::singleShot(1500, button, [button] { button->setText(QStringLiteral("Copy Prompt")); });
+    });
+    h->addWidget(button, 0, Qt::AlignTop);
+    row->setGraphicsEffect(new QGraphicsOpacityEffect(row));
     return row;
 }
 
@@ -780,12 +825,17 @@ QWidget* SettingsDialog::magic() {
         const bool on = server().enabled ? server().enabled() : s.value(QStringLiteral("agentsEnabled"), true).toBool();
         auto* sw = new Switch(on, {});
         gv->addWidget(toggleRow(QStringLiteral("Let AI apps edit in Editroom"), &note, sw, true));
+        QWidget* own = ownAgentRow();
+        gv->addWidget(own);
         auto* problem = text(QString(), 11.5, QColor(0xE5, 0x73, 0x5C), 400, true);
         gv->addWidget(problem);
         auto* working = text(QString(), 11.5, Theme::textDim());
         gv->addWidget(working);
-        auto refresh = [note, problem, working, sw] {
+        auto refresh = [note, problem, working, sw, own] {
             const bool enabled = sw->isChecked();
+            own->setEnabled(enabled);
+            auto* fade = qobject_cast<QGraphicsOpacityEffect*>(own->graphicsEffect());
+            if (fade) fade->setOpacity(enabled ? 1 : 0.4);
             note->setText(enabled ? QStringLiteral("On: connected apps can edit here, with their own cursor, and every change can be undone. Only apps on this computer can reach Editroom.")
                                   : QStringLiteral("Off: no app can reach Editroom, and Magic only makes quick cuts on this computer."));
             const QString p = server().problem ? server().problem() : QString();

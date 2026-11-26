@@ -1,7 +1,7 @@
 # IMPLEMENTATION — Editroom LX
 
 The plan for porting `../editroom` (Mac, Swift, ~33.9k lines) to Linux (C++20 / Qt 6 / Vulkan), following
-[PROMPT.md](PROMPT.md). Mac baseline: `editroom@7b7b865`, version 1.0.3 (build 4).
+[PROMPT.md](PROMPT.md). Mac baseline: `editroom@7b7b865`, version 1.0.3 (build 4); synced since to `editroom@4272a42`, version 1.0.10 (build 11).
 
 Contents:
 1. Inventory of the Mac app
@@ -123,6 +123,7 @@ matters.
 | `Network.framework` `NWListener` | MCP HTTP server | `QTcpServer` bound to `QHostAddress::LocalHost`, port 47920, or any free port if taken | The same JSON-RPC, the same "hello/list answered by the bridge" trick |
 | `Process` (Claude Code / Codex) | Magic agent runs | `QProcess` with the same argument lists; the CLIs are found on `$PATH`, `~/.local/bin` and `~/.npm-global/bin` | `claude` and `codex` are both on this dev box |
 | `.mcpb` Claude extension, bundle IDs | Connect Claude Desktop / ChatGPT | `claude mcp add …`, `~/.codex/config.toml`; Claude Desktop is offered only when it is installed (detected); the ChatGPT desktop app isn't on Linux, so Codex CLI is the ChatGPT route | Wording stays "Claude" / "ChatGPT" |
+| MetalFX `MTLFXSpatialScaler` | Export upscaling (1.0.5) | FSR 1 EASU in `Kernel.inc` (GPU and CPU) | Export only; video fitted at more than 1.01× |
 | Sparkle (EdDSA appcast) | Updates | `Updates` reads the same `appcast.xml` with a `sparkle:os="linux"` enclosure; EdDSA verified with libsodium; the AppImage replaces itself; Flatpak and distro packages get "Open release page" | The alert wording and layout match `UpdateDriver` |
 | `NSOpenPanel/NSSavePanel` | Open/import/save/export | `QFileDialog` (uses xdg-desktop-portal under Flatpak) | |
 | `NSAlert` | Alerts | `EditroomAlert` (styled `QDialog`), the same text and button order | Mac order is [Cancel][Default] on the right: keep it |

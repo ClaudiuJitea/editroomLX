@@ -46,6 +46,14 @@ bool atCuts(const QString& request);
 LocalOutcome plan(const QString& request, const MagicPointers& ptr, const Project& p);
 } // namespace LocalRamp
 
+/// LocalZoom.swift: Local's zooms, as the zoom button on Scale makes them: "zoom in on @selected", "add a zoom",
+/// "push in", "zoom out", "zoom in and out", or "remove the zoom". On the clips pointed at or selected, else the
+/// one at the playhead.
+namespace LocalZoom {
+bool asks(const QString& request);
+LocalOutcome plan(const QString& request, const MagicPointers& ptr, const Project& p);
+} // namespace LocalZoom
+
 namespace LocalSpeech {
 bool asks(const QString& request);
 LocalOutcome plan(const Project& p, const std::optional<IdSet>& only, const TranscriptOf& transcript);

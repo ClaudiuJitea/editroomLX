@@ -80,13 +80,17 @@ public:
 protected:
     void paintEvent(QPaintEvent*) override;
     void contextMenuEvent(QContextMenuEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
     void dragEnterEvent(QDragEnterEvent*) override;
     void dragLeaveEvent(QDragLeaveEvent*) override;
     void dropEvent(QDropEvent*) override;
 private:
     void refresh();
+    void reveal(const MediaPick& target);
+    void showDropped();
     Controller& c_;
     QWidget* header_;
+    QWidget* dropOverlay_;
     QWidget* body_;
     QLineEdit* search_;
     QWidget* missing_;

@@ -434,6 +434,9 @@ void Project::resolveOverlaps(const IdSet& keeping) {
     const double eps = 1e-6;
     std::vector<Clip> movers;
     for (const auto& c : clips) if (keeping.count(c.id)) movers.push_back(c);
+    /// The right-hand pieces of clips split in two, by what they were linked to and where they were cut.
+    struct Right { Uuid id, link; double from, to; };
+    std::vector<Right> rights;
     for (const auto& m : movers) {
         std::vector<Clip> result;
         result.reserve(clips.size() + 1);
@@ -448,6 +451,7 @@ void Project::resolveOverlaps(const IdSet& keeping) {
                 Clip right = c;
                 right.id = newUuid();
                 right.linkID.reset();
+                if (c.linkID) rights.push_back({right.id, *c.linkID, m.start, m.end()});
                 right.fadeIn = 0;
                 right.trimHead(m.end());
                 c.fadeOut = 0;
@@ -463,6 +467,19 @@ void Project::resolveOverlaps(const IdSet& keeping) {
             }
         }
         clips = std::move(result);
+    }
+    // A linked clip split by something dropped across it and its partner (a video with its sound): the two
+    // right-hand pieces are linked to each other, as the left-hand ones still are. A piece whose partner wasn't
+    // split (a title dropped over the picture only) stays on its own.
+    std::map<QString, std::vector<Uuid>> groups;
+    for (const auto& r : rights)
+        groups[r.link.toString() + u'|' + QString::number(std::llround(r.from * 1000)) + u'|' + QString::number(std::llround(r.to * 1000))].push_back(r.id);
+    for (const auto& [key, pieces] : groups) {
+        std::set<TrackKind> kinds;
+        for (const auto& id : pieces) if (const Clip* c = clip(id)) kinds.insert(trackKindOf(c->kind));
+        if (pieces.size() < 2 || kinds.size() < 2) continue;
+        const Uuid link = newUuid();
+        for (const auto& id : pieces) if (auto i = index(id)) clips[*i].linkID = link;
     }
 }
 

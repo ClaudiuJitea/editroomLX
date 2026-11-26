@@ -1,5 +1,5 @@
 {
- "instructions": "Editroom is a video editor. Times are in seconds. Video tracks are V1, V2, … (V1 is the bottom; higher tracks cover lower ones) and audio tracks are A1, A2, …. A video with sound is placed as a linked pair: moving, trimming or deleting either moves both. Placing, moving or trimming a clip over another on the same track overwrites what's underneath, as on the timeline. Start with get_project and list_media; analyze_media finds a clip's best moments or a song's beats; look_at_media shows you a clip or photo, and get_frame shows you the cut; search_media finds shots by what they show or what's said. After looking at a clip, save what you saw with note_media; list_media gives those notes back next time, so trust a clip's notes and look again only for an exact frame. Each edit is shown to the person with your own cursor and can be undone with history. auto_edit builds a whole cut on its own, and export delivers it to a file (vertical, square or portrait too, at a loudness target).",
+ "instructions": "Editroom is a video editor. Times are in seconds. Video tracks are V1, V2, … (V1 is the bottom; higher tracks cover lower ones) and audio tracks are A1, A2, …. A video with sound is placed as a linked pair: moving, trimming or deleting either moves both. Placing, moving or trimming a clip, title or solid over another on the same track overwrites what's underneath, as on the timeline. Start with get_project and list_media; analyze_media finds a clip's best moments or a song's beats; look_at_media shows you a clip or photo, and get_frame shows you the cut; search_media finds shots by what they show or what's said. After looking at a clip, save what you saw with note_media; list_media gives those notes back next time, so trust a clip's notes and look again only for an exact frame. Each edit is shown to the person with your own cursor and can be undone with history. auto_edit builds a whole cut on its own, and export delivers it to a file (vertical, square or portrait too, at a loudness target).",
  "tools": [
   {
    "name": "get_project",
@@ -1036,8 +1036,8 @@
   },
   {
    "name": "set_transform",
-   "title": "Position and scale",
-   "description": "Moves and scales a video, photo or solid in the frame, for reframing (keeping a subject in a vertical crop, a picture-in-picture). A title's place is set with set_title_style.",
+   "title": "Position, scale and zoom",
+   "description": "Moves and scales a video, photo or solid in the frame, for reframing (keeping a subject in a vertical crop, a picture-in-picture). With zoom, it animates over the clip between the full frame and this scale and framing: pushing in on a moment, or following the action in a screen recording. A title's place is set with set_title_style.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -1047,7 +1047,7 @@
      },
      "scale": {
       "type": "number",
-      "description": "1 fits the frame; 2 is twice as big (0.05...10)."
+      "description": "1 fits the frame; 2 is twice as big (0.05...10). With zoom, how far in it goes (default 2)."
      },
      "x": {
       "type": "number",
@@ -1057,9 +1057,39 @@
       "type": "number",
       "description": "Offset down, as a fraction of the frame's height (0 is centred, positive is lower)."
      },
+     "focus_x": {
+      "type": "number",
+      "description": "Instead of x: the point to frame, across the picture (0 left edge, 0.5 centre, 1 right edge). Scaled up, the picture is placed so that point is centred, as near as its edges allow."
+     },
+     "focus_y": {
+      "type": "number",
+      "description": "Instead of y: the point to frame, down the picture (0 top, 0.5 centre, 1 bottom)."
+     },
+     "zoom": {
+      "type": "string",
+      "enum": [
+       "in",
+       "in_out",
+       "out",
+       "off"
+      ],
+      "description": "Animate: in (full frame to this framing), in_out (in, hold, back out at the end), out (from this framing back to the full frame), or off (stay at this framing)."
+     },
+     "zoom_seconds": {
+      "type": "number",
+      "description": "How long each move takes (default a quarter of the clip, 0.5 to 2 seconds)."
+     },
+     "zoom_start": {
+      "type": "number",
+      "description": "Seconds into the clip when the move starts: for in and in_out, when it starts moving in (default 0); for out, when it starts moving out (default so it ends with the clip)."
+     },
+     "zoom_smooth": {
+      "type": "boolean",
+      "description": "Eased in and out (the default), or false for an even pace."
+     },
      "reset": {
       "type": "boolean",
-      "description": "Back to fitted and centred."
+      "description": "Back to fitted and centred, with no zoom."
      }
     },
     "required": [

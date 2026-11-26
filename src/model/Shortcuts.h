@@ -44,7 +44,7 @@ enum class ShortcutAction {
     playPause, stepBack, stepForward, previousEdit, nextEdit, goToStart, goToEnd, loop, fullScreenViewer,
     selectTool, cutTool,
     split, addDissolve, detachAudio, duplicate, freezeFrame, reverse, copyGrade, pasteGrade, delete_, rippleDelete,
-    rippleTrimStart, rippleTrimEnd, addText,
+    rippleTrimStart, rippleTrimEnd, addText, revealInMedia,
     addMarker, setIn, setOut, clearInOut,
     zoomIn, zoomOut, zoomToFit, snapping, sticky, skimming, audioScrubbing,
 };
