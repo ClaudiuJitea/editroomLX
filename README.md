@@ -140,3 +140,15 @@ them those tests skip.
 holds one record per sync with the Mac, and `docs/bench/` the measured timings.
 
 Editroom LX is MIT-licensed. FFmpeg is linked dynamically (LGPL); the third-party licences are in `third_party/`.
+
+## Credits
+
+Editroom LX is a port of [Editroom](https://github.com/robbietilton/Editroom), the open-source video editor for
+the Mac by [Robbie Tilton](https://github.com/robbietilton) and Wonder Assembly LLC, released under the MIT
+licence. Its design, features, Magic and the `.room` project format all come from the Mac app; this port
+recreates them for Linux. Thank you to the Editroom authors for making it open source.
+
+Also built with [Qt](https://www.qt.io), [FFmpeg](https://ffmpeg.org), [whisper.cpp](https://github.com/ggml-org/whisper.cpp),
+[ONNX Runtime](https://onnxruntime.ai), [miniaudio](https://miniaud.io),
+[Signalsmith Stretch](https://signalsmith-audio.co.uk/code/stretch/), [YuNet](https://github.com/opencv/opencv_zoo)
+and the [Inter](https://rsms.me/inter/) typeface.
