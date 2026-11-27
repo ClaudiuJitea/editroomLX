@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
         QCoreApplication::setApplicationVersion(QStringLiteral(EDITROOM_VERSION));
         const QStringList args = app.arguments();
         if (args.contains(QStringLiteral("--version"))) {
-            log(QStringLiteral("Editroom LX %1 (Mac baseline %2)").arg(EDITROOM_VERSION, EDITROOM_MAC_BASELINE));
+            log(QStringLiteral("EditroomLX %1 (Mac baseline %2)").arg(EDITROOM_VERSION, EDITROOM_MAC_BASELINE));
             return 0;
         }
         if (args.contains(QStringLiteral("--dump-schema"))) return dumpSchema();
@@ -229,10 +229,10 @@ int main(int argc, char** argv) {
     er::SettingsDialog::agentApps() = {
         {QStringLiteral("Claude Code"), [] { return !er::MagicAgent::cli(er::MagicAgent::Kind::claude).isEmpty(); },
          [] { return er::AgentConnect::claudeCodeConnected(); }, er::AgentConnect::connectClaudeCode, er::AgentConnect::disconnectClaudeCode,
-         QStringLiteral("Adds Editroom to Claude Code for all your projects."), QStringLiteral("Connected. New Claude Code sessions can edit here.")},
+         QStringLiteral("Adds EditroomLX to Claude Code for all your projects."), QStringLiteral("Connected. New Claude Code sessions can edit here.")},
         {QStringLiteral("ChatGPT (Codex)"), [] { return !er::MagicAgent::cli(er::MagicAgent::Kind::chatgpt).isEmpty(); },
          [] { return er::AgentConnect::codexConnected(); }, er::AgentConnect::connectCodex, er::AgentConnect::disconnectCodex,
-         QStringLiteral("Adds Editroom to Codex."), QStringLiteral("Connected. ChatGPT can edit here, and Magic can use it.")},
+         QStringLiteral("Adds EditroomLX to Codex."), QStringLiteral("Connected. ChatGPT can edit here, and Magic can use it.")},
     };
     er::SettingsDialog::server() = {
         [&mcp] { return mcp.enabled(); },

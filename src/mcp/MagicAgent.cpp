@@ -1,4 +1,5 @@
 #include "MagicAgent.h"
+#include <QRegularExpression>
 #include <QPointer>
 #include <QTimer>
 #include "MagicPlan.h"
@@ -77,11 +78,17 @@ void MagicAgent::setModel(Kind k, const QString& id, const QString& effort) {
     s.setValue(QStringLiteral("magicEffort.") + rawValue(k), effort);
 }
 
+/// The Mac's words, with the app's Linux name: "Editroom" becomes "EditroomLX" (ids such as "editroom" stay).
+static QByteArray branded(QByteArray json) {
+    static const QRegularExpression word(QStringLiteral("(?<![\\w/-])Editroom(?![\\w/]| LX)"));
+    return QString::fromUtf8(json).replace(word, QStringLiteral("EditroomLX")).replace(QStringLiteral("this Mac"), QStringLiteral("this computer")).toUtf8();
+}
+
 static QJsonObject briefText() {
     for (const QString& p : {QCoreApplication::applicationDirPath() + QStringLiteral("/../share/editroom/magic-brief.json"),
                              QStringLiteral(ER_RESOURCES "/magic-brief.json")}) {
         QFile f(p);
-        if (f.open(QIODevice::ReadOnly)) return QJsonDocument::fromJson(f.readAll()).object();
+        if (f.open(QIODevice::ReadOnly)) return QJsonDocument::fromJson(branded(f.readAll())).object();
     }
     return {};
 }
@@ -241,7 +248,7 @@ void MagicAgent::start(const QString& request, Kind k) {
     }
     // Magic needs Editroom's connection even when other apps aren't allowed in.
     if (!server_.running() && !server_.start()) {
-        emit finished(QString(), false, QStringLiteral("Editroom couldn't open its connection for %1.").arg(name(k)));
+        emit finished(QString(), false, QStringLiteral("EditroomLX couldn't open its connection for %1.").arg(name(k)));
         return;
     }
     // Nothing plays while the AI works out the edit.

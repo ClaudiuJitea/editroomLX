@@ -208,11 +208,11 @@ QString ownAgentPrompt() {
     const QString appImage = qEnvironmentVariable("APPIMAGE");
     const QString launcher = appImage.isEmpty() ? QCoreApplication::applicationFilePath() : appImage;
     const QString endpoint = SettingsDialog::server().endpoint ? SettingsDialog::server().endpoint() : QStringLiteral("http://127.0.0.1:47920/mcp");
-    return QStringLiteral("Connect to Editroom, the video editor on my computer, and edit only through its MCP tools (never screenshots or clicks). "
-                          "Its MCP server runs as the command \"%1\" with the argument --mcp (stdio; it opens Editroom when needed), "
-                          "or at %2 (Streamable HTTP) while Editroom is open. Add it to your MCP settings as \"editroom\" "
+    return QStringLiteral("Connect to EditroomLX, the video editor on my computer, and edit only through its MCP tools (never screenshots or clicks). "
+                          "Its MCP server runs as the command \"%1\" with the argument --mcp (stdio; it opens EditroomLX when needed), "
+                          "or at %2 (Streamable HTTP) while EditroomLX is open. Add it to your MCP settings as \"editroom\" "
                           "(or use the entry if it's already there). Until its tools appear in a new session, call the address directly. "
-                          "Then call get_project and list_media, and follow the instructions Editroom sends when you connect.")
+                          "Then call get_project and list_media, and follow the instructions EditroomLX sends when you connect.")
         .arg(launcher, endpoint);
 }
 
@@ -811,7 +811,7 @@ QWidget* SettingsDialog::magic() {
             });
             inner->addWidget(row);
         }
-        gv->addWidget(text(QStringLiteral("Connected apps use your own Claude or ChatGPT plan; no API key needed. Disconnecting stops Editroom answering that app, for Magic and for edits you ask for in the app."),
+        gv->addWidget(text(QStringLiteral("Connected apps use your own Claude or ChatGPT plan; no API key needed. Disconnecting stops EditroomLX answering that app, for Magic and for edits you ask for in the app."),
                            11, Theme::textFaint(), 400, true));
         v->addWidget(group);
     }
@@ -824,7 +824,7 @@ QWidget* SettingsDialog::magic() {
         QLabel* note;
         const bool on = server().enabled ? server().enabled() : s.value(QStringLiteral("agentsEnabled"), true).toBool();
         auto* sw = new Switch(on, {});
-        gv->addWidget(toggleRow(QStringLiteral("Let AI apps edit in Editroom"), &note, sw, true));
+        gv->addWidget(toggleRow(QStringLiteral("Let AI apps edit in EditroomLX"), &note, sw, true));
         QWidget* own = ownAgentRow();
         gv->addWidget(own);
         auto* problem = text(QString(), 11.5, QColor(0xE5, 0x73, 0x5C), 400, true);
@@ -836,8 +836,8 @@ QWidget* SettingsDialog::magic() {
             own->setEnabled(enabled);
             auto* fade = qobject_cast<QGraphicsOpacityEffect*>(own->graphicsEffect());
             if (fade) fade->setOpacity(enabled ? 1 : 0.4);
-            note->setText(enabled ? QStringLiteral("On: connected apps can edit here, with their own cursor, and every change can be undone. Only apps on this computer can reach Editroom.")
-                                  : QStringLiteral("Off: no app can reach Editroom, and Magic only makes quick cuts on this computer."));
+            note->setText(enabled ? QStringLiteral("On: connected apps can edit here, with their own cursor, and every change can be undone. Only apps on this computer can reach EditroomLX.")
+                                  : QStringLiteral("Off: no app can reach EditroomLX, and Magic only makes quick cuts on this computer."));
             const QString p = server().problem ? server().problem() : QString();
             problem->setText(p);
             problem->setVisible(enabled && !p.isEmpty());
@@ -925,7 +925,7 @@ QWidget* SettingsDialog::updates() {
         check->setEnabled(true);
         status->setText(!r.ok ? QStringLiteral("Couldn't check: %1").arg(r.error)
                         : r.none ? QStringLiteral("No releases on GitHub yet.")
-                        : r.newer ? QStringLiteral("Editroom %1 is available.").arg(r.version)
+                        : r.newer ? QStringLiteral("EditroomLX %1 is available.").arg(r.version)
                                   : QStringLiteral("You're up to date."));
         if (auto* l = lastRow->findChildren<QLabel*>().value(1)) l->setText(lastText());
     });

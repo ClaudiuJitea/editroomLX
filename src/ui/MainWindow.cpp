@@ -170,7 +170,7 @@ void MainWindow::rebuildMenus() {
     item(file, QStringLiteral("Import Media…"), [this] { c_.showImportPanel(); }, ShortcutAction::importMedia);
     item(file, QStringLiteral("Export…"), [this] { showExport(); }, ShortcutAction::export_);
     file->addSeparator();
-    QAction* quit = file->addAction(QStringLiteral("Quit Editroom"), this, &QWidget::close);
+    QAction* quit = file->addAction(QStringLiteral("Quit EditroomLX"), this, &QWidget::close);
     quit->setShortcut(QKeySequence(QStringLiteral("Ctrl+Q")));
     // Edit
     QMenu* edit = menuBar()->addMenu(QStringLiteral("Edit"));
@@ -263,7 +263,7 @@ void MainWindow::rebuildMenus() {
     fs->setShortcut(QKeySequence(QStringLiteral("F11")));
     // Help (the Mac's app menu items: About Editroom, Check for Updates…)
     QMenu* help = menuBar()->addMenu(QStringLiteral("Help"));
-    help->addAction(QStringLiteral("About Editroom"), this, &MainWindow::showAbout);
+    help->addAction(QStringLiteral("About EditroomLX"), this, &MainWindow::showAbout);
     help->addAction(QStringLiteral("Check for Updates…"), this, [this] {
         Updates::shared().checkAndTell(this);
     });
@@ -289,7 +289,7 @@ void MainWindow::showSettings() {
 void MainWindow::showAbout() {
     // The standard About panel: the icon, the name, the version, and one quiet line of credits under it.
     QDialog d(this);
-    d.setWindowTitle(QStringLiteral("About Editroom"));
+    d.setWindowTitle(QStringLiteral("About EditroomLX"));
     d.setFixedWidth(300);
     auto* v = new QVBoxLayout(&d);
     v->setContentsMargins(20, 24, 20, 20);
@@ -303,7 +303,7 @@ void MainWindow::showAbout() {
     name->setFont(Theme::font(14, 700));
     name->setAlignment(Qt::AlignCenter);
     v->addWidget(name);
-    auto* version = new QLabel(QStringLiteral("Version %1 (LX)").arg(QCoreApplication::applicationVersion()));
+    auto* version = new QLabel(QStringLiteral("Version %1").arg(QCoreApplication::applicationVersion()));
     version->setFont(Theme::font(11));
     version->setAlignment(Qt::AlignCenter);
     v->addWidget(version);

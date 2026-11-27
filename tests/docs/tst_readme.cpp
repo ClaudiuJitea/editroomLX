@@ -79,7 +79,7 @@ private slots:
                 ++k;
             }
             Clip text(v2, ClipKind::text, 0.4, 2.6);
-            text.text.string = QStringLiteral("Editroom LX");
+            text.text.string = QStringLiteral("EditroomLX");
             text.text.size = 130;
             text.fadeIn = 0.4;
             text.fadeOut = 0.5;

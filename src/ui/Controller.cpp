@@ -133,7 +133,7 @@ bool Controller::showScrubFrame(double t) { return engine_->showScrubFrame(t); }
 bool Controller::offerSpeechModel() {
     if (transcripts_.downloading()) return true;
     if (alert(QStringLiteral("Download the speech model?"),
-              QStringLiteral("Captions, transcripts and searching what's said need Editroom's speech model. It's about 150 MB, downloaded once, "
+              QStringLiteral("Captions, transcripts and searching what's said need EditroomLX's speech model. It's about 150 MB, downloaded once, "
                              "and runs on this computer: nothing you edit is sent anywhere."),
               {QStringLiteral("Download"), QStringLiteral("Not Now")}) != 0) return false;
     downloadSpeechModel();
@@ -255,11 +255,11 @@ void Controller::showError(const QString& message) { Alert::run(window_, message
 
 QString Controller::chooseSaveFile(const QString& suggested) {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
-    return QFileDialog::getSaveFileName(window_, QString(), dir + u'/' + suggested, QStringLiteral("Editroom project (*.room)"));
+    return QFileDialog::getSaveFileName(window_, QString(), dir + u'/' + suggested, QStringLiteral("EditroomLX project (*.room)"));
 }
 
 QString Controller::chooseProjectFile() {
-    return QFileDialog::getOpenFileName(window_, QString(), QString(), QStringLiteral("Editroom project (*.room *.cutplay)"));
+    return QFileDialog::getOpenFileName(window_, QString(), QString(), QStringLiteral("EditroomLX project (*.room *.cutplay)"));
 }
 
 void Controller::showImportPanel() {

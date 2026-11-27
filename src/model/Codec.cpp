@@ -574,7 +574,7 @@ Result decodeDocument(const QByteArray& bytes) {
     QJsonParseError pe;
     const QJsonDocument doc = QJsonDocument::fromJson(bytes, &pe);
     if (pe.error != QJsonParseError::NoError) { res.error = pe.errorString(); return res; }
-    if (!doc.isObject()) { res.error = QStringLiteral("The file isn't an Editroom project."); return res; }
+    if (!doc.isObject()) { res.error = QStringLiteral("The file isn't an EditroomLX project."); return res; }
     try {
         Reader r(doc.object(), QString());
         SavedDocument d;

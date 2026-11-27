@@ -1,6 +1,6 @@
-<p align="center"><img src="resources/icons/hicolor/editroom-128.png" width="96" alt="Editroom LX icon"></p>
+<p align="center"><img src="resources/icons/hicolor/editroom-128.png" width="96" alt="EditroomLX icon"></p>
 
-<h1 align="center">Editroom LX</h1>
+<h1 align="center">EditroomLX</h1>
 
 <p align="center">A fast video editor for Linux, the port of Editroom for the Mac.<br>
 C++20, Qt 6 and Vulkan. GPU where it helps, everything on your computer.</p>
@@ -141,11 +141,11 @@ them those tests skip.
 [docs/PARITY.md](docs/PARITY.md) lists every difference from the Mac app and what's still to build. `docs/sync/`
 holds one record per sync with the Mac, and `docs/bench/` the measured timings.
 
-Editroom LX is MIT-licensed. FFmpeg is linked dynamically (LGPL); the third-party licences are in `third_party/`.
+EditroomLX is MIT-licensed. FFmpeg is linked dynamically (LGPL); the third-party licences are in `third_party/`.
 
 ## Credits
 
-Editroom LX is a port of [Editroom](https://github.com/robbietilton/Editroom), the open-source video editor for
+EditroomLX is a port of [Editroom](https://github.com/robbietilton/Editroom), the open-source video editor for
 the Mac by [@robbietilton](https://github.com/robbietilton) (Wonder Assembly LLC), released under the MIT
 licence. Its design, features, Magic and the `.room` project format all come from the Mac app; this port
 recreates them for Linux. Thank you to the Editroom authors for making it open source.

@@ -100,23 +100,23 @@ namespace {
 void tell(QWidget* parent, const Updates::Result& r, bool quiet) {
     const QString installed = QCoreApplication::applicationVersion();
     if (!r.ok) {
-        if (!quiet) Alert::run(parent, QStringLiteral("Update Error!"), QStringLiteral("Editroom couldn't check for updates: %1").arg(r.error), {QStringLiteral("OK")});
+        if (!quiet) Alert::run(parent, QStringLiteral("Update Error!"), QStringLiteral("EditroomLX couldn't check for updates: %1").arg(r.error), {QStringLiteral("OK")});
         return;
     }
     if (r.none) {
         if (!quiet) Alert::run(parent, QStringLiteral("No releases yet"),
-                               QStringLiteral("There's no Editroom LX release on GitHub to update to yet. You have %1.").arg(installed), {QStringLiteral("OK")});
+                               QStringLiteral("There's no EditroomLX release on GitHub to update to yet. You have %1.").arg(installed), {QStringLiteral("OK")});
         return;
     }
     if (!r.newer) {
-        if (!quiet) Alert::run(parent, QStringLiteral("You're up to date!"), QStringLiteral("Editroom %1 is currently the newest version available.").arg(installed), {QStringLiteral("OK")});
+        if (!quiet) Alert::run(parent, QStringLiteral("You're up to date!"), QStringLiteral("EditroomLX %1 is currently the newest version available.").arg(installed), {QStringLiteral("OK")});
         return;
     }
     QString notes = r.notes.trimmed();
     if (notes.size() > 600) notes = notes.left(600).trimmed() + QStringLiteral("…");
-    const QString text = QStringLiteral("Editroom %1 is now available—you have %2. Would you like to download it now?").arg(r.version, installed)
+    const QString text = QStringLiteral("EditroomLX %1 is now available—you have %2. Would you like to download it now?").arg(r.version, installed)
                        + (notes.isEmpty() ? QString() : QStringLiteral("\n\n") + notes);
-    if (Alert::run(parent, QStringLiteral("A new version of Editroom is available!"), text, {QStringLiteral("View Release"), QStringLiteral("Remind Me Later")}) == 0)
+    if (Alert::run(parent, QStringLiteral("A new version of EditroomLX is available!"), text, {QStringLiteral("View Release"), QStringLiteral("Remind Me Later")}) == 0)
         QDesktopServices::openUrl(QUrl(r.url));
 }
 } // namespace

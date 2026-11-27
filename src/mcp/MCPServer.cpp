@@ -30,7 +30,7 @@ std::optional<QJsonObject> MCPHandler::handshake(const QJsonObject& req) {
         const QString asked = params.value("protocolVersion").toString(kVersions[0]);
         return ok(QJsonObject{{"protocolVersion", kVersions.contains(asked) ? asked : kVersions[0]},
                               {"capabilities", QJsonObject{{"tools", QJsonObject{{"listChanged", false}}}}},
-                              {"serverInfo", QJsonObject{{"name", "editroom"}, {"title", "Editroom"}, {"version", "1.0"}}},
+                              {"serverInfo", QJsonObject{{"name", "editroom"}, {"title", "EditroomLX"}, {"version", "1.0"}}},
                               {"instructions", MCPTools::instructions()}});
     }
     if (method == QLatin1String("ping")) return ok(QJsonObject{});
@@ -59,7 +59,7 @@ bool MCPServer::start() {
     // This computer only: never reachable from the network.
     if (server_.listen(QHostAddress::LocalHost, port)) { problem_.clear(); return true; }
     if (server_.listen(QHostAddress::LocalHost, 0)) {
-        problem_ = QStringLiteral("Another copy of Editroom is answering AI apps; this one only runs its own Magic.");
+        problem_ = QStringLiteral("Another copy of EditroomLX is answering AI apps; this one only runs its own Magic.");
         return true;
     }
     problem_ = QStringLiteral("Couldn't listen on port %1: %2").arg(port).arg(server_.errorString());
@@ -245,7 +245,7 @@ int runMCPBridge(int argc, char** argv) {
         }
         if (!answered && hasId)
             reply = json::write(MCPHandler::error(json.value("id"), -32000,
-                QStringLiteral("Editroom isn't answering. Open Editroom and turn on AI Agents (Edit menu > Settings… > Magic).")), false);
+                QStringLiteral("EditroomLX isn't answering. Open EditroomLX and turn on AI Agents (Edit menu > Settings… > Magic).")), false);
         if (!reply.isEmpty() && hasId) writeLine(reply);
     }
     return 0;

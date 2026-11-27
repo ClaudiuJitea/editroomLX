@@ -121,11 +121,17 @@ void MCPDraft::redo() {
 // MARK: Definitions
 
 namespace {
+/// The Mac's words, with the app's Linux name: "Editroom" becomes "EditroomLX" (ids such as "editroom" stay).
+static QByteArray branded(QByteArray json) {
+    static const QRegularExpression word(QStringLiteral("(?<![\\w/-])Editroom(?![\\w/]| LX)"));
+    return QString::fromUtf8(json).replace(word, QStringLiteral("EditroomLX")).replace(QStringLiteral("this Mac"), QStringLiteral("this computer")).toUtf8();
+}
+
 QJsonObject loadDefinitions() {
     for (const QString& p : {QCoreApplication::applicationDirPath() + QStringLiteral("/../share/editroom/mcp-tools.json"),
                              QStringLiteral(ER_RESOURCES "/mcp-tools.json")}) {
         QFile f(p);
-        if (f.open(QIODevice::ReadOnly)) return QJsonDocument::fromJson(f.readAll()).object();
+        if (f.open(QIODevice::ReadOnly)) return QJsonDocument::fromJson(branded(f.readAll())).object();
     }
     return {};
 }
@@ -543,7 +549,7 @@ QString download(Controller& c, const QUrl& url, const QString& name, const QStr
     auto probe = Probe::file(dest);
     if (!probe || !probe->hasAudio || probe->duration < 1) {
         QFile::remove(dest);
-        throw MCPToolError{QStringLiteral("That file isn't audio Editroom can play. Find the direct link to an .mp3 or .wav.")};
+        throw MCPToolError{QStringLiteral("That file isn't audio EditroomLX can play. Find the direct link to an .mp3 or .wav.")};
     }
     QFile note(folder + QStringLiteral("/Sources.txt"));
     if (note.open(QIODevice::Append)) {
@@ -713,7 +719,7 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
             return jsonOut(QJsonObject{{"asset_id", uuid(a.id)}, {"status", "no_sound"}, {"note", QStringLiteral("%1 has no sound.").arg(a.name)}});
         if (!Transcripts::available())
             return jsonOut(QJsonObject{{"asset_id", uuid(a.id)}, {"status", "unavailable"},
-                                       {"note", "Hearing speech needs Editroom's speech model, which the person can download in Settings › General › Speech."}});
+                                       {"note", "Hearing speech needs EditroomLX's speech model, which the person can download in Settings › General › Speech."}});
         auto t = waitTranscript(ctl, path);
         if (!t) return jsonOut(QJsonObject{{"asset_id", uuid(a.id)}, {"status", "failed"}, {"note", QStringLiteral("Couldn't hear what's said in %1.").arg(a.name)}});
         return jsonOut(transcriptJSON(*t, a, args.value("words").toBool(false)));
@@ -887,7 +893,7 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
             return jsonOut(QJsonObject{{"captions", captionsJSON(draft ? draft->project : m.project(), ctl)}});
         }
         if (!Transcripts::available())
-            throw MCPToolError{QStringLiteral("Captions need Editroom's speech model, which the person can download in Settings › General › Speech.")};
+            throw MCPToolError{QStringLiteral("Captions need EditroomLX's speech model, which the person can download in Settings › General › Speech.")};
         const IdSet targets = p.unlocked(given.empty() ? (p.captions ? IdSet() : p.defaultCaptionTargets()) : p.captionTargets(given));
         if (!given.empty() && targets.empty()) throw MCPToolError{QStringLiteral("Those clips have no sound to caption.")};
         if (!p.captions && targets.empty()) throw MCPToolError{QStringLiteral("There's no one talking to caption: give clip_ids of clips with speech.")};

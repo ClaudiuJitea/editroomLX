@@ -107,7 +107,7 @@ private slots:
         QCOMPARE(c->model().undoDepth(), undo + 1);
         // The brief: the Mac's words, for this computer.
         const QString brief = MagicAgent::brief(QStringLiteral("make it fast"), c->model().project());
-        QVERIFY(brief.startsWith(QStringLiteral("You're the editor in Editroom, the video editor open on this computer.")));
+        QVERIFY(brief.startsWith(QStringLiteral("You're the editor in EditroomLX, the video editor open on this computer.")));
         QVERIFY(brief.contains(QStringLiteral("What they asked for: \"make it fast\"")));
     }
 

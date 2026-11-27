@@ -630,7 +630,7 @@ LocalOutcome plan(const Project& p, const std::optional<IdSet>& only, const Tran
         if (s1 - at >= shortest) cuts.push_back({c.start + (at - s0), c.start + (s1 - s0)});
     }
     if (talking == 0)
-        return said(unheard > 0 ? QStringLiteral("Editroom is still listening to your clips. Try again in a moment.")
+        return said(unheard > 0 ? QStringLiteral("EditroomLX is still listening to your clips. Try again in a moment.")
                                 : QStringLiteral("Nobody talks in %1, so there were no pauses to cut.").arg(only ? QStringLiteral("those clips") : QStringLiteral("the edit")));
     if (cuts.empty()) return said(QStringLiteral("The talking is already tight: no pauses long enough to cut."));
     double total = 0;
