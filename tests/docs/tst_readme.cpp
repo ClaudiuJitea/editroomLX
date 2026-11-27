@@ -49,7 +49,7 @@ private slots:
         w->resize(1600, 1000);
         w->show();
         QVERIFY(QTest::qWaitForWindowExposed(w.get()));
-        for (const char* f : {"Sunrise.mp4", "Fractal.mp4", "Studio.mp4", "Ocean.mp4", "Soundtrack.wav"}) {
+        for (const char* f : {"Desert.mp4", "Highway.mp4", "Trail.mp4", "Jump.mp4", "Soundtrack.wav"}) {
             auto a = c->media().importFile(media + u'/' + QLatin1String(f));
             QVERIFY2(a, f);
             assets[QLatin1String(f)] = *a;
@@ -61,7 +61,7 @@ private slots:
             const Uuid v1 = p.videoTracks[0].id, v2 = p.videoTracks[1].id, a1 = p.audioTracks[0].id, a2 = p.audioTracks[1].id;
             double t = 0;
             int k = 0;
-            for (const char* f : {"Sunrise.mp4", "Fractal.mp4", "Studio.mp4", "Ocean.mp4"}) {
+            for (const char* f : {"Desert.mp4", "Highway.mp4", "Trail.mp4", "Jump.mp4"}) {
                 const MediaAsset& a = assets[QLatin1String(f)];
                 const Uuid link = newUuid();
                 Clip v(v1, ClipKind::video, t, 3.0, 1.0);
@@ -120,7 +120,7 @@ private slots:
         MagicPopover pop(*c, agent, w.get());
         pop.show();
         settle();
-        if (auto* box = pop.findChild<QPlainTextEdit*>()) box->setPlainText(QStringLiteral("make it 20 seconds, fast, black and white, and open on @Ocean"));
+        if (auto* box = pop.findChild<QPlainTextEdit*>()) box->setPlainText(QStringLiteral("make it 20 seconds, fast, black and white, and open on @Jump"));
         settle(300);
         save(&pop, "magic-box");
     }
