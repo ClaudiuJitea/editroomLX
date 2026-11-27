@@ -103,7 +103,7 @@ for scene tags.
 cmake --preset release && cmake --build --preset release
 build/release/src/app/editroom-lx                        # the editor
 cmake --build build/release --target package             # .deb and .tgz
-scripts/make-appimage.sh <folder with linuxdeploy>       # AppImage (FFmpeg from the system)
+scripts/make-appimage.sh "$PWD/build/tools"             # AppImage (linuxdeploy in build/tools; FFmpeg from the system)
 ```
 
 On Ubuntu or Debian:

@@ -21,6 +21,10 @@ chmod +x "$tools"/linuxdeploy*.AppImage
 ln -sf "$tools/linuxdeploy-plugin-qt-x86_64.AppImage" "$tools/linuxdeploy-plugin-qt"
 export PATH="$tools:$PATH" QMAKE=${QMAKE:-$(command -v qmake6 || command -v qmake)} APPIMAGE_EXTRACT_AND_RUN=1
 export OUTPUT=Editroom-LX-x86_64.AppImage
+# Wayland as well as X11 (the viewer presents natively on both), and offscreen for headless checks. The Qt plugin
+# then brings the Wayland shell, decoration and graphics integration plugins along.
+export EXTRA_PLATFORM_PLUGINS="libqwayland.so;libqoffscreen.so"
+export EXTRA_QT_MODULES="waylandclient"
 cd build
 "$tools/linuxdeploy-x86_64.AppImage" --appdir AppDir \
   -e AppDir/usr/bin/editroom-lx \
