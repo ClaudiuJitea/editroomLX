@@ -8,7 +8,7 @@ runtime: org.kde.Platform
 runtime-version: '6.10'
 sdk: org.kde.Sdk
 command: editroom-lx
-rename-desktop-file: editroom.desktop
+rename-desktop-file: editroomlx.desktop
 rename-icon: editroom
 finish-args:
   - --share=ipc

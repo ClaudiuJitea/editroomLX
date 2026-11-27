@@ -162,7 +162,7 @@ editroomLX/
                     LibraryView, PreviewView, ViewerWidget, InspectorView, TimelinePanel, TimelineCanvas,
                     TimelineLayout, ExportSheet, ExportProgress, MagicPopover, MentionField, SettingsView,
                     EditroomAlert
-  resources/        fonts/Inter*, icons/, editroom.desktop, editroom.xml (MIME), strings.json (all UI text)
+  resources/        fonts/Inter*, icons/, editroomlx.desktop, editroom.xml (MIME), strings.json (all UI text)
   third_party/      miniaudio, signalsmith-stretch, pocketfft, (VkFFT), nlohmann/json (or QJson*)
   tests/            unit/, golden/ (Mac reference PNGs + projects), gpu/, format/, selftest/, bench/
   scripts/          parity-diff.py, make-test-clips.sh, mac/render-frames.swift, release.sh, appimage.sh

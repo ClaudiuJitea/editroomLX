@@ -28,8 +28,8 @@ export EXTRA_QT_MODULES="waylandclient"
 cd build
 "$tools/linuxdeploy-x86_64.AppImage" --appdir AppDir \
   -e AppDir/usr/bin/editroom-lx \
-  -d AppDir/usr/share/applications/editroom.desktop \
-  -i AppDir/usr/share/icons/hicolor/256x256/apps/editroom.png \
+  -d AppDir/usr/share/applications/editroomlx.desktop \
+  -i AppDir/usr/share/icons/hicolor/256x256/apps/editroomlx.png \
   --plugin qt \
   --exclude-library 'libavcodec*' --exclude-library 'libavformat*' --exclude-library 'libavutil*' \
   --exclude-library 'libavfilter*' --exclude-library 'libavdevice*' --exclude-library 'libswscale*' \

@@ -206,6 +206,34 @@ private slots:
         stream.pause();
         QVERIFY(!stream.isPlaying());
     }
+
+    void outputDelay() {
+        // Bluetooth headphones take the sound 0.15–0.3 s to play (as the sound server reports it; forced here): what's
+        // heard, which the picture shows, is that much behind what's handed over, and never before where play started.
+        qputenv("EDITROOM_SINK_LATENCY", "0.25");
+        Project p;
+        p.assets = {tone};
+        Clip c(p.audioTracks[0].id, ClipKind::audio, 0, 2); c.assetID = tone.id;
+        p.clips = {c};
+        {
+            AudioStream stream;
+            stream.setPlan(AudioPlanBuilder::build(p, sources(), true));
+            stream.play(0.5);
+            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+            // Started: the picture waits at the start with the sound, rather than running ahead of it.
+            QCOMPARE(stream.currentTime(), 0.5);
+            std::this_thread::sleep_for(std::chrono::milliseconds(450));
+            QVERIFY(std::abs(stream.sinkLatency() - 0.25) < 1e-9);
+            const double t = stream.currentTime();
+            // 0.6 s played, 0.25 s of it still on its way: about 0.85 heard.
+            QVERIFY2(t > 0.75 && t < 0.95, qPrintable(QString::number(t)));
+            // To the end: what's still on its way plays out, so the end is reached.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1800));
+            QVERIFY(stream.ended());
+            QVERIFY2(stream.currentTime() >= 2.0 - 1e-6, qPrintable(QString::number(stream.currentTime())));
+        }
+        qunsetenv("EDITROOM_SINK_LATENCY");
+    }
 };
 
 QTEST_MAIN(TestAudio)

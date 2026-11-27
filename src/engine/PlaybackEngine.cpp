@@ -156,7 +156,8 @@ void PlaybackEngine::renderLoop() {
         const ScrubFrames scrubFrames = scrubFrames_;
         if (playing_) {
             // The frame for what's being heard.
-            t = audio_.currentTime() + audio_.outputLatency();
+            // (currentTime already allows for the output's delay, Bluetooth headphones included.)
+            t = audio_.currentTime();
             const double frame = std::floor(t * fps_ + 1e-6) / fps_;
             if (frame == lastFrameTime) {
                 g.unlock();

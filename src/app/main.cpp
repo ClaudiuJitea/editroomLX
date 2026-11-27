@@ -25,6 +25,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <cstdio>
+#include <chrono>
+#include <thread>
+#include "audio/AudioStream.h"
 
 using namespace er;
 
@@ -137,6 +140,17 @@ int main(int argc, char** argv) {
     const bool headless = raw.contains(QStringLiteral("--version")) || raw.contains(QStringLiteral("--roundtrip")) ||
                           raw.contains(QStringLiteral("--dump-schema")) || raw.contains(QStringLiteral("--dump-shortcuts")) ||
                           raw.contains(QStringLiteral("--dump-mcp-tools"));
+    // `--sound-delay`: the output Editroom plays to, and how long its sound takes to be heard (Bluetooth headphones
+    // add 0.15–0.3 s), as the picture allows for it.
+    if (raw.contains(QStringLiteral("--sound-delay"))) {
+        er::AudioStream stream;
+        stream.play(0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(700));
+        std::printf("SOUND device=\"%s\" buffer=%.0f ms output=%.0f ms total=%.0f ms\n", qPrintable(stream.deviceName()),
+                    (stream.outputLatency() - stream.sinkLatency()) * 1000, stream.sinkLatency() * 1000, stream.outputLatency() * 1000);
+        stream.pause();
+        return 0;
+    }
     // `--bench`: drawing titles needs a GUI application, which runs offscreen here.
     if (const auto b = raw.indexOf(QStringLiteral("--bench")); b >= 0) {
         if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) qputenv("QT_QPA_PLATFORM", "offscreen");
@@ -185,7 +199,10 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName(QStringLiteral("Editroom"));
     QApplication::setOrganizationName(QStringLiteral("Editroom"));
     QApplication::setApplicationVersion(QStringLiteral(EDITROOM_VERSION));
-    QApplication::setDesktopFileName(QStringLiteral("editroom"));
+    // The app's own name on the desktop (the launcher, its window and the dock): EditroomLX, with its own id, so it's
+    // never taken for another Editroom. Settings and projects stay under "Editroom" (the Mac's names).
+    QApplication::setApplicationDisplayName(QStringLiteral("EditroomLX"));
+    QApplication::setDesktopFileName(QStringLiteral("editroomlx"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/editroom.png")));
     const QStringList args = app.arguments();
     // One Editroom at a time: a later launch hands its files to the running copy (test launches don't).

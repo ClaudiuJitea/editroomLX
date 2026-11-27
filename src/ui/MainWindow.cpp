@@ -35,7 +35,7 @@ MainWindow::MainWindow(Controller& c, QWidget* parent)
     : QMainWindow(parent), c_(c),
       keys_([] { return QSettings().value(QLatin1String(ShortcutStore::key)).toByteArray(); },
             [](const std::optional<QByteArray>& d) { QSettings s; if (d) s.setValue(QLatin1String(ShortcutStore::key), *d); else s.remove(QLatin1String(ShortcutStore::key)); }) {
-    setWindowTitle(QStringLiteral("Editroom"));
+    setWindowTitle(QStringLiteral("EditroomLX"));
     setMinimumSize(1080, 680);
     resize(1480, 940);
     setAcceptDrops(true);
@@ -132,7 +132,7 @@ void MainWindow::applyTheme() {
 
 void MainWindow::refreshTitle() {
     title_->setText(c_.model().title() + (c_.model().isDirty() && !EditorModel::autosaves() ? QStringLiteral("  •") : QString()));
-    setWindowTitle(c_.model().title() + QStringLiteral(" — Editroom"));
+    setWindowTitle(c_.model().title() + QStringLiteral(" — EditroomLX"));
 }
 
 void MainWindow::rebuildMenus() {
@@ -299,7 +299,7 @@ void MainWindow::showAbout() {
     icon->setAlignment(Qt::AlignCenter);
     v->addWidget(icon);
     v->addSpacing(6);
-    auto* name = new QLabel(QStringLiteral("Editroom"));
+    auto* name = new QLabel(QStringLiteral("EditroomLX"));
     name->setFont(Theme::font(14, 700));
     name->setAlignment(Qt::AlignCenter);
     v->addWidget(name);

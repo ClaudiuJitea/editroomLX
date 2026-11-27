@@ -24,13 +24,17 @@ public:
     void pause();
     void seek(double t);
     bool isPlaying() const;
-    /// The timeline time being heard now.
+    /// The timeline time being heard now: what was handed to the output, less what's still on its way to the ears
+    /// (`outputLatency`).
     double currentTime() const;
     /// Set when the feed reached the end of the timeline (not looping) and everything queued was heard.
     bool ended() const;
     /// Set once each time a loop went round; cleared by reading.
     bool takeWrap();
+    /// How long sound handed over takes to be heard: the device's buffer plus the output's own delay.
     double outputLatency() const;
+    /// The output's own delay as the sound server reports it (Bluetooth headphones: 0.15–0.3 s).
+    double sinkLatency() const;
 
 private:
     struct Impl;

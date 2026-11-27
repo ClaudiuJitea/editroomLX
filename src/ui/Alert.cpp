@@ -11,7 +11,7 @@
 namespace er {
 
 Alert::Alert(const QString& message, const QString& info, const QStringList& buttons, QWidget* parent) : QDialog(parent) {
-    setWindowTitle(QStringLiteral("Editroom"));
+    setWindowTitle(QStringLiteral("EditroomLX"));
     setModal(true);
     auto* v = new QVBoxLayout(this);
     v->setContentsMargins(22, 20, 22, 16);
