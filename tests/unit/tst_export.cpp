@@ -8,6 +8,7 @@
 #include "media/Decoder.h"
 #include "rendering/CpuRenderer.h"
 #include <QFile>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -139,6 +140,88 @@ private slots:
     }
 
     // In/out: exporting just the range gives a file the range's length (SelfTest RANGE).
+    /// A one-second 640×360 clip whose luma code is `left` on the left half and `right` on the right (10-bit, lossless
+    /// FFV1), tagged HLG/Rec.2020 or Rec.709.
+    static bool makeClip(const QString& path, bool hlg, int left, int right) {
+        QStringList args = {"-y", "-loglevel", "error", "-f", "lavfi", "-i", "nullsrc=s=640x360:r=30:d=1",
+                            "-vf", QStringLiteral("format=yuv420p10le,geq=lum='if(lt(X,320),%1,%2)':cb=512:cr=512,"
+                                                  "setparams=color_primaries=%3:color_trc=%4:colorspace=%5:range=tv")
+                                       .arg(left).arg(right).arg(hlg ? "bt2020" : "bt709", hlg ? "arib-std-b67" : "bt709", hlg ? "bt2020nc" : "bt709"),
+                            "-c:v", "ffv1", "-level", "3", path};
+        QProcess ff;
+        ff.start(QStringLiteral("ffmpeg"), args);
+        return ff.waitForFinished(60000) && ff.exitCode() == 0 && QFile::exists(path);
+    }
+
+    /// Luma (0…1 of the 10-bit video range) at points of the frame at `t`, as the file has it.
+    static std::vector<double> luma(const QString& path, double t, const std::vector<std::pair<int, int>>& points) {
+        auto dec = VideoDecoder::open(path, VideoDecoder::Accel::software);
+        auto f = dec ? dec->frameAt(t) : std::nullopt;
+        std::vector<double> out;
+        if (!f) return out;
+        const uint8_t* b = f->data->data() + f->offset[0];
+        for (const auto& [x, y] : points) {
+            const uint16_t* row = reinterpret_cast<const uint16_t*>(b + size_t(y) * f->stride[0]);
+            const int code = f->format == ER_SRC_P010 ? row[x] >> 6 : f->format == ER_SRC_YUV420P10 ? row[x] & 1023 : -1;
+            out.push_back((double(code) - 64) / 876);
+        }
+        return out;
+    }
+
+    void hdr() {
+        // The Mac's HDR self-test: an HDR (HLG) project keeps an HLG clip's levels (normal white 0.75, a highlight 0.95),
+        // an SDR solid and an SDR clip's white land at standard white (0.75, not boosted), and the export is 10-bit HEVC
+        // tagged HLG/Rec.2020. The same project as SDR still exports Rec.709.
+        const QString hlgPath = dir.filePath(QStringLiteral("hdr_patches.mkv")), sdrPath = dir.filePath(QStringLiteral("sdr_white.mkv"));
+        // HLG 0.75 and 0.95 (codes 721, 896); SDR white (940).
+        if (!makeClip(hlgPath, true, 721, 896) || !makeClip(sdrPath, false, 940, 940)) QSKIP("ffmpeg couldn't make the test clips");
+        auto h = media.importFile(hlgPath), wclip = media.importFile(sdrPath);
+        QVERIFY(h && wclip);
+        QCOMPARE(SourceColors::name(media.runtime(h->id)->color), SourceColors::name(SourceColor::hlg));
+        Project p;
+        p.width = 640; p.height = 360; p.fps = 30; p.hdr = true; p.settingsLocked = true;
+        p.assets = {*h, *wclip};
+        Clip a(p.videoTracks[0].id, ClipKind::video, 0, 1); a.assetID = h->id;
+        Clip b(p.videoTracks[0].id, ClipKind::video, 1, 1); b.assetID = wclip->id;
+        Clip solid(p.videoTracks[1].id, ClipKind::solid, 0, 1);
+        solid.color = RGBA{1, 1, 1, 1};
+        ClipTransform t; t.scale = 0.25; t.x = 0; t.y = 0.3;
+        solid.transform = t;
+        p.clips = {a, b, solid};
+        ExportSettings s; s.codec = ExportSettings::Codec::h264; s.includeAudio = false;
+        std::atomic<bool> cancel{false};
+        for (GpuRenderer* renderer : {static_cast<GpuRenderer*>(nullptr), gpu.get()}) {
+            const QString out = dir.filePath(renderer ? QStringLiteral("hdr_gpu.mp4") : QStringLiteral("hdr_cpu.mp4"));
+            const auto res = runExport(p, media, *sound, renderer, s, out, {}, cancel);
+            QVERIFY2(res.ok, qPrintable(res.error));
+            qInfo().noquote() << "HDR encoder" << res.encoder << "renderer" << res.renderer;
+            // hevc, BT.2020 (9), ARIB STD-B67 (18), BT.2020 NCL (9).
+            QVERIFY2(tag(out, "video").startsWith(QLatin1String("hevc 640x360 prim=9 trc=18 spc=9")), qPrintable(tag(out, "video")));
+            const auto first = luma(out, 0.5, {{160, 90}, {480, 90}, {320, 288}});
+            const auto second = luma(out, 1.5, {{320, 180}});
+            QCOMPARE(first.size(), size_t(3));
+            QCOMPARE(second.size(), size_t(1));
+            const QString got = QStringLiteral("%1 %2 %3 | %4").arg(first[0], 0, 'f', 3).arg(first[1], 0, 'f', 3).arg(first[2], 0, 'f', 3).arg(second[0], 0, 'f', 3);
+            qInfo().noquote() << "HDR levels (0.75 0.95 solid | SDR white)" << got;
+            QVERIFY2(std::abs(first[0] - 0.75) < 0.04 && std::abs(first[1] - 0.95) < 0.04, qPrintable(got));
+            QVERIFY2(std::abs(first[2] - 0.75) < 0.04 && std::abs(second[0] - 0.75) < 0.04, qPrintable(got));
+            if (!gpu) break;
+        }
+        Project sdr = p;
+        sdr.hdr.reset();
+        const QString out = dir.filePath(QStringLiteral("hdr_as_sdr.mp4"));
+        const auto res = runExport(sdr, media, *sound, gpu.get(), s, out, {}, cancel);
+        QVERIFY2(res.ok, qPrintable(res.error));
+        QVERIFY2(tag(out, "video").startsWith(QLatin1String("h264 640x360 prim=1 trc=1 spc=1")), qPrintable(tag(out, "video")));
+        // In the viewer (no HDR screen), the same HDR project shows SDR white as white, as it does in SDR.
+        BuildOptions o; o.renderW = 640; o.renderH = 360;
+        auto view = *CompositionBuilder::build(p, media, o);
+        QCOMPARE(view.hdr, ER_HDR_VIEW);
+        const auto px = CpuRenderer::render(describeFrame(view, 1.5, media.provider(640)));
+        const size_t at = (size_t(180) * 640 + 320) * 4;
+        QVERIFY2(px[at] >= 253 && px[at + 1] >= 253 && px[at + 2] >= 253, qPrintable(QStringLiteral("%1 %2 %3").arg(px[at]).arg(px[at + 1]).arg(px[at + 2])));
+    }
+
     void range() {
         Project p = edit();
         p.inPoint = 1;

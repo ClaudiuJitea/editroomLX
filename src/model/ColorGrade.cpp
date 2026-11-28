@@ -14,12 +14,15 @@ bool ColorGrade::sameGrade(const ColorGrade& o) const {
     return look == o.look && lookIntensity == o.lookIntensity && exposure == o.exposure && contrast == o.contrast &&
            saturation == o.saturation && temperature == o.temperature && tint == o.tint &&
            shadows.x == o.shadows.x && shadows.y == o.shadows.y && midtones.x == o.midtones.x &&
-           midtones.y == o.midtones.y && highlights.x == o.highlights.x && highlights.y == o.highlights.y;
+           midtones.y == o.midtones.y && highlights.x == o.highlights.x && highlights.y == o.highlights.y &&
+           shadowsLevel == o.shadowsLevel && midtonesLevel == o.midtonesLevel && highlightsLevel == o.highlightsLevel &&
+           off == o.off;
 }
 
 bool ColorGrade::isNeutral() const {
     ColorGrade g = *this;
     if (!g.look) g.lookIntensity = ColorGrade().lookIntensity;
+    g.off = false;
     return g.sameGrade(ColorGrade());
 }
 
@@ -262,7 +265,8 @@ struct GradeKey {
         auto tie = [](const ColorGrade& c) {
             return std::make_tuple(c.look.value_or(QString()), c.look.has_value(), c.lookIntensity, c.exposure, c.contrast,
                                    c.saturation, c.temperature, c.tint, c.shadows.x, c.shadows.y, c.midtones.x,
-                                   c.midtones.y, c.highlights.x, c.highlights.y);
+                                   c.midtones.y, c.highlights.x, c.highlights.y, c.shadowsLevel, c.midtonesLevel,
+                                   c.highlightsLevel, c.off);
         };
         return tie(g) < tie(o.g);
     }
@@ -281,7 +285,7 @@ std::shared_ptr<CubeLUT> GradeBaker::cubeFile(const QString& path) {
 }
 
 std::shared_ptr<const std::vector<float>> GradeBaker::cube(const std::optional<ColorGrade>& gradeIn) {
-    if (!gradeIn || gradeIn->isNeutral()) return nullptr;
+    if (!gradeIn || gradeIn->isNeutral() || gradeIn->off) return nullptr;
     ColorGrade grade = *gradeIn;
     grade.extra = {};
     {
@@ -297,7 +301,10 @@ std::shared_ptr<const std::vector<float>> GradeBaker::cube(const std::optional<C
     GradeRecipe user;
     user.exposure = grade.exposure; user.contrast = grade.contrast; user.saturation = grade.saturation;
     user.temperature = grade.temperature; user.tint = grade.tint;
-    user.shadows = grade.shadows.offset(); user.midtones = grade.midtones.offset(); user.highlights = grade.highlights.offset();
+    auto plus = [](RGB c, double v) { return RGB{c.r + v, c.g + v, c.b + v}; };
+    user.shadows = plus(grade.shadows.offset(), ColorGrade::levelOffset(grade.shadowsLevel));
+    user.midtones = plus(grade.midtones.offset(), ColorGrade::levelOffset(grade.midtonesLevel));
+    user.highlights = plus(grade.highlights.offset(), ColorGrade::levelOffset(grade.highlightsLevel));
     const double mix = std::min(1.0, std::max(0.0, grade.lookIntensity));
     const int n = dimension;
     auto data = std::make_shared<std::vector<float>>(size_t(n) * n * n * 4, 1.0f);

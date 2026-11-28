@@ -53,6 +53,9 @@ inline int max(int a, int b) { return std::max(a, b); }
 inline float abs(float v) { return std::abs(v); }
 inline float sqrt(float v) { return std::sqrt(v); }
 inline float dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline float pow(float a, float b) { return std::pow(a, b); }
+inline float exp(float v) { return std::exp(v); }
+inline float log(float v) { return std::log(v); }
 
 #define ER_OUT(T) T&
 #define ER_INOUT(T) T&
@@ -77,6 +80,17 @@ inline float dot(vec3 a, vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 #define ER_MATRIX_709 0
 #define ER_MATRIX_601 1
 #define ER_MATRIX_2020 2
+
+// What a layer's values mean, in an HDR project (ErLayer.transfer). An SDR project converts nothing.
+#define ER_TF_709 0        // Rec.709 video (and Log, already turned into it by its cube): BT.709's curve and primaries
+#define ER_TF_SRGB 1       // solids, titles, captions and photos: sRGB
+#define ER_TF_HLG 2        // HLG in Rec.2020 (HDR video kept as HDR)
+#define ER_TF_PQ 3         // PQ in Rec.2020 (made HLG on the way out, as AVFoundation does)
+
+// The frame's dynamic range (ErFrame.hdr).
+#define ER_HDR_OFF 0       // SDR (Rec.709), unmanaged, as every project was before
+#define ER_HDR_HLG 1       // HDR: put together in linear Rec.2020 and written as HLG (the export)
+#define ER_HDR_VIEW 2      // the same composite, shown on a screen without HDR: Rec.709 with highlights clipped at white
 
 #define ER_LAYER_PICTURE 0 // a video frame or a still, fitted to the canvas
 #define ER_LAYER_SOLID 1
@@ -117,7 +131,7 @@ struct ErLayer {
     int pixX;        // pixmap placement (top-left, canvas pixels, y down)
     int pixY;
     int upscale;     // 1: enlarged with the spatial upscaler (export), not just stretched
-    int pad1;
+    int transfer;    // ER_TF_*: what its values mean in an HDR project
 };
 
 struct ErFrame {
@@ -130,7 +144,7 @@ struct ErFrame {
     int layerCount;
     int captionCount; // pixmap layers in output space, after the canvas ones
     int firstCaption;
-    int pad0;
+    int hdr;         // ER_HDR_*
     int pad1;
     int pad2;
 };
@@ -244,6 +258,121 @@ ER_INLINE vec3 er_rgb_to_yuv709(vec3 c, float maxCode) {
     float u = (b - y) / (2.0 * (1.0 - kb));
     float v = (r - y) / (2.0 * (1.0 - kr));
     return vec3(16.0 * k + 219.0 * k * y, 128.0 * k + 224.0 * k * u, 128.0 * k + 224.0 * k * v);
+}
+
+/// R'G'B' to BT.2020 (non-constant luminance) limited-range Y'CbCr, as code values over `maxCode` (an HDR export).
+ER_INLINE vec3 er_rgb_to_yuv2020(vec3 c, float maxCode) {
+    float kr = 0.2627;
+    float kb = 0.0593;
+    float kg = 1.0 - kr - kb;
+    float k = (maxCode + 1.0) / 256.0;
+    float r = er_clamp01(c.x);
+    float g = er_clamp01(c.y);
+    float b = er_clamp01(c.z);
+    float y = kr * r + kg * g + kb * b;
+    float u = (b - y) / (2.0 * (1.0 - kb));
+    float v = (r - y) / (2.0 * (1.0 - kr));
+    return vec3(16.0 * k + 219.0 * k * y, 128.0 * k + 224.0 * k * u, 128.0 * k + 224.0 * k * v);
+}
+
+// MARK: HDR projects
+//
+// The Mac puts an HDR project together with Core Image colour-managed, in extended linear Rec.2020 at half float:
+// SDR clips, titles and solids at standard white (BT.2408: HLG 0.75), HDR highlights above it, out as HLG. Here the
+// working space is the same: linear light in Rec.2020 primaries, display-referred, with SDR white (203 cd/m², HLG
+// 0.75) at 1.0. HLG is BT.2100's, with its system gamma (1.2 at a 1000 cd/m² peak) applied on luminance.
+
+/// BT.709's curve, as an encoded value to linear (and back): the itur_709 colour space Core Image matches from.
+ER_INLINE float er_709_to_linear(float v) {
+    if (v < 0.081) return v / 4.5;
+    return pow((max(v, 0.0) + 0.099) / 1.099, 1.0 / 0.45);
+}
+ER_INLINE float er_linear_to_709(float v) {
+    if (v < 0.018) return max(v, 0.0) * 4.5;
+    return 1.099 * pow(v, 0.45) - 0.099;
+}
+ER_INLINE float er_srgb_to_linear(float v) {
+    if (v <= 0.04045) return v / 12.92;
+    return pow((v + 0.055) / 1.055, 2.4);
+}
+
+/// Rec.709 primaries to Rec.2020 (BT.2087), and back.
+ER_INLINE vec3 er_709_to_2020(vec3 c) {
+    return vec3(0.627404 * c.x + 0.329283 * c.y + 0.043313 * c.z,
+                0.069097 * c.x + 0.919540 * c.y + 0.011362 * c.z,
+                0.016391 * c.x + 0.088013 * c.y + 0.895595 * c.z);
+}
+ER_INLINE vec3 er_2020_to_709(vec3 c) {
+    return vec3(1.660491 * c.x - 0.587641 * c.y - 0.072850 * c.z,
+                -0.124551 * c.x + 1.132900 * c.y - 0.008349 * c.z,
+                -0.018151 * c.x - 0.100579 * c.y + 1.118730 * c.z);
+}
+
+/// HLG's OETF and its inverse (BT.2100): scene light 0…1 to signal 0…1.
+ER_INLINE float er_hlg_oetf(float e) {
+    e = max(e, 0.0);
+    if (e <= 1.0 / 12.0) return sqrt(3.0 * e);
+    return 0.17883277 * log(12.0 * e - 0.28466892) + 0.55991073;
+}
+ER_INLINE float er_hlg_inverse_oetf(float v) {
+    v = max(v, 0.0);
+    if (v <= 0.5) return v * v / 3.0;
+    return (exp((v - 0.55991073) / 0.17883277) + 0.28466892) / 12.0;
+}
+
+/// Scene luminance of HLG 0.75 lifted by the system gamma: what SDR white (1.0 in the working space) is, so that HLG
+/// 0.75 comes in at exactly 1.0 and goes out at exactly 0.75.
+ER_INLINE float er_hlg_white() { return pow(er_hlg_inverse_oetf(0.75), 1.2); }
+
+ER_INLINE float er_luma2020(vec3 c) { return 0.2627 * c.x + 0.6780 * c.y + 0.0593 * c.z; }
+
+/// An HLG signal (Rec.2020) to the working space: scene light, the OOTF (gamma 1.2 on luminance), SDR white at 1.
+ER_INLINE vec3 er_hlg_to_linear(vec3 c) {
+    vec3 e = vec3(er_hlg_inverse_oetf(c.x), er_hlg_inverse_oetf(c.y), er_hlg_inverse_oetf(c.z));
+    float ys = er_luma2020(e);
+    if (ys <= 0.0) return vec3(0.0);
+    return e * (pow(ys, 0.2) / er_hlg_white());
+}
+
+/// The working space to an HLG signal: the OOTF undone (light above HLG's peak, 1000 cd/m², is clipped), then the OETF.
+ER_INLINE vec3 er_linear_to_hlg(vec3 c) {
+    vec3 d = vec3(max(c.x, 0.0), max(c.y, 0.0), max(c.z, 0.0)) * er_hlg_white();
+    float yd = er_luma2020(d);
+    if (yd <= 0.0) return vec3(0.0);
+    float ys = pow(yd, 1.0 / 1.2);
+    vec3 e = d / pow(ys, 0.2);
+    return vec3(er_hlg_oetf(min(e.x, 1.0)), er_hlg_oetf(min(e.y, 1.0)), er_hlg_oetf(min(e.z, 1.0)));
+}
+
+/// A PQ signal (Rec.2020, SMPTE ST 2084) to the working space: absolute light, with 203 cd/m² as SDR white.
+ER_INLINE float er_pq_to_nits(float v) {
+    float p = pow(max(v, 0.0), 1.0 / 78.84375);
+    float d = p - 0.8359375;
+    float l = max(d, 0.0) / (18.8515625 - 18.6875 * p);
+    return pow(l, 1.0 / 0.1593017578125) * 10000.0;
+}
+ER_INLINE vec3 er_pq_to_linear(vec3 c) { return vec3(er_pq_to_nits(c.x), er_pq_to_nits(c.y), er_pq_to_nits(c.z)) / 203.0; }
+
+/// A layer's colour (premultiplied, as it's encoded) into the working space (premultiplied, linear Rec.2020).
+ER_INLINE vec4 er_to_working(vec4 c, int transfer) {
+    if (c.w <= 0.0) return vec4(0.0);
+    vec3 v = er_unpremultiply(c);
+    vec3 l;
+    if (transfer == ER_TF_HLG) l = er_hlg_to_linear(v);
+    else if (transfer == ER_TF_PQ) l = er_pq_to_linear(v);
+    else if (transfer == ER_TF_SRGB) l = er_709_to_2020(vec3(er_srgb_to_linear(v.x), er_srgb_to_linear(v.y), er_srgb_to_linear(v.z)));
+    else l = er_709_to_2020(vec3(er_709_to_linear(v.x), er_709_to_linear(v.y), er_709_to_linear(v.z)));
+    return vec4(l * c.w, c.w);
+}
+
+/// The working space to what's written out: HLG for the export, or Rec.709 for a screen without HDR (SDR white
+/// stays white; brighter highlights are clipped at it, as on a display with no headroom).
+ER_INLINE vec4 er_from_working(vec4 c, int hdr) {
+    vec3 v = er_unpremultiply(c);
+    if (hdr == ER_HDR_HLG) return vec4(er_linear_to_hlg(v) * c.w, c.w);
+    vec3 s = er_2020_to_709(v);
+    s = vec3(er_clamp01(s.x), er_clamp01(s.y), er_clamp01(s.z));
+    return vec4(vec3(er_linear_to_709(s.x), er_linear_to_709(s.y), er_linear_to_709(s.z)) * c.w, c.w);
 }
 
 #ifdef __cplusplus

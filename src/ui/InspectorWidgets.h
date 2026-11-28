@@ -33,9 +33,13 @@ public:
     void add(QWidget* w);
     void add(QLayout* l);
     bool collapsed() const { return collapsed_; }
+    /// Beside the title (Grade's before/after eye); the rest of the header row still folds and unfolds.
+    void setAccessory(QWidget* w);
 private:
     void toggle();
     void sync();
+    void placeAccessory();
+    QWidget* accessory_ = nullptr;
     QString title_;
     QWidget* header_;
     QWidget* content_;
@@ -240,11 +244,26 @@ private:
 };
 
 /// Shows or hides part of the captions' look: a bare eye, a little brighter on hover.
+/// Beside Grade's title: the grade on or off (off, it's kept but not shown or exported). Only there when there's a
+/// grade.
+class GradeEye : public QAbstractButton {
+    Q_OBJECT
+public:
+    GradeEye(bool hidden, std::function<void()> action, QWidget* parent = nullptr);
+    QSize sizeHint() const override { return {18, 16}; }
+protected:
+    void paintEvent(QPaintEvent*) override;
+    void enterEvent(QEnterEvent*) override { update(); }
+    void leaveEvent(QEvent*) override { update(); }
+private:
+    bool hidden_;
+};
+
 class CaptionEye : public QAbstractButton {
     Q_OBJECT
 public:
     CaptionEye(bool on, std::function<void()> action, QWidget* parent = nullptr);
-    QSize sizeHint() const override { return {20, 20}; }
+    QSize sizeHint() const override { return {18, 16}; }
 protected:
     void paintEvent(QPaintEvent*) override;
     void enterEvent(QEnterEvent*) override { update(); }
@@ -276,8 +295,9 @@ private:
 };
 
 /// The row a colour, eye or other control sits in: icon, name, then the controls on the right.
+/// `afterLabel` sits right after the name (the caption highlight and outline eyes, as Grade's beside its title).
 QWidget* labelledRow(const RowIcon& icon, const QString& label, std::initializer_list<QWidget*> right, bool dim = false,
-                     int labelWidth = -1);
+                     int labelWidth = -1, QWidget* afterLabel = nullptr);
 /// Small faint note text under a row (10–10.5 px).
 QLabel* note(const QString& text, double px = 10.5, int indent = 0);
 

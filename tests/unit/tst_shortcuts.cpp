@@ -54,7 +54,14 @@ private slots:
         QCOMPARE(KeyCombo("forwardDelete", false, true).display(), QStringLiteral("Shift+Delete"));
         QCOMPARE(KeyCombo::cmd("s", true).macDisplay(), QStringLiteral("⇧⌘S"));
         QCOMPARE(Shortcut::title(A::open), QStringLiteral("Open…"));
-        QCOMPARE(Shortcut::allCases().size(), size_t(44)); // with Reveal in Media (1.0.10)
+        QCOMPARE(Shortcut::allCases().size(), size_t(48)); // with the four tab actions (1.1)
+        // Tabs (1.1): Ctrl+T, Ctrl+W, Ctrl+Shift+[ and ]; Add Text moved to ⌃T (Meta+T).
+        QCOMPARE(Shortcut::defaults(A::newTab).front().display(), QStringLiteral("Ctrl+T"));
+        QCOMPARE(Shortcut::defaults(A::closeTab).front().display(), QStringLiteral("Ctrl+W"));
+        QCOMPARE(Shortcut::defaults(A::previousTab).front().macDisplay(), QStringLiteral("⇧⌘["));
+        QCOMPARE(Shortcut::defaults(A::addText).front().display(), QStringLiteral("Meta+T"));
+        QCOMPARE(Shortcut::defaults(A::addText).front().macDisplay(), QStringLiteral("⌃T"));
+        QCOMPARE(Shortcut::group(A::nextTab), QStringLiteral("Tabs"));
     }
 
     void typedMenuKeys() {

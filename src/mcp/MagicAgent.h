@@ -33,6 +33,8 @@ public:
     void start(const QString& request, Kind k);
     void stop();
     bool running() const { return process_ != nullptr; }
+    /// The tab in front (Magic works on it; switching tabs waits while it does).
+    void setController(Controller& c) { if (!running()) c_ = &c; }
     QString status() const { return status_; }
 
 signals:
@@ -44,7 +46,7 @@ private:
     void read(const QByteArray& line);
     void done(int code);
     static QString doing(const QString& tool);
-    Controller& c_;
+    Controller* c_;
     MCPServer& server_;
     QProcess* process_ = nullptr;
     Kind kind_ = Kind::claude;

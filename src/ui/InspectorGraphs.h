@@ -15,10 +15,14 @@ namespace er {
 class ColorWheel : public QWidget {
     Q_OBJECT
 public:
-    ColorWheel(const QString& title, WheelPoint point, std::function<void(WheelPoint)> onChange, std::function<void()> onEnd,
-               QWidget* parent = nullptr);
+    /// `level` is the range's brightness, -100...100, on the hairline under the wheel (drag to set, double-click to
+    /// reset), shown beside the name once it's moved.
+    ColorWheel(const QString& title, WheelPoint point, double level, std::function<void(WheelPoint)> onChange,
+               std::function<void(double)> onLevel, std::function<void()> onEnd, QWidget* parent = nullptr);
     void setPoint(const WheelPoint& p) { if (!dragging_) { point_ = p; update(); } }
+    void setLevel(double v) { if (!levelDragging_) { level_ = v; update(); } }
     static constexpr int size = 78;
+    static constexpr int lineWidth = 66;
 protected:
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
@@ -29,8 +33,16 @@ protected:
     void leaveEvent(QEvent*) override { update(); }
 private:
     QRectF wheel() const;
+    /// The brightness hairline's box (14 px tall, under the wheel).
+    QRectF line() const;
+    void dragLevel(double x);
     QString title_;
     WheelPoint point_;
+    double level_ = 0;
+    /// The hairline is being dragged: its number stays up, even passing through zero.
+    bool levelDragging_ = false;
+    bool lineHover_ = false;
+    std::function<void(double)> onLevel_;
     std::function<void(WheelPoint)> onChange_;
     std::function<void()> onEnd_;
     bool dragging_ = false;

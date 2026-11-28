@@ -96,6 +96,31 @@ class TestGpu : public QObject {
             BuildOptions o; o.renderW = 1280; o.renderH = 720; o.upscale = true;
             out.push_back({QStringLiteral("upscale"), *CompositionBuilder::build(p, m, o), 1.0, frames});
         }
+        for (bool hlgOut : {true, false}) {
+            // An HDR project: an HLG clip, graded, dissolving into an SDR one, a title and a half-faded solid over them;
+            // as HLG for the export, and as SDR for the viewer.
+            Project p;
+            p.hdr = true;
+            MediaAsset h; h.kind = MediaKind::video; h.duration = 10; h.name = "h"; h.path = "/x/h.mov";
+            p.assets = {v, h};
+            Clip c(p.videoTracks[0].id, ClipKind::video, 0, 5); c.assetID = h.id;
+            ColorGrade g; g.contrast = 12; g.highlightsLevel = -30; g.midtones = {0.1, 0.2, {}};
+            c.grade = g;
+            Clip d(p.videoTracks[0].id, ClipKind::video, 5, 5, 3); d.assetID = v.id;
+            d.transitionIn = Transition{TransitionKind::dissolve, 1.0, {}};
+            Clip solid(p.videoTracks[1].id, ClipKind::solid, 4, 2); solid.color = RGBA{0.9, 0.3, 0.1, 1}; solid.fadeIn = 1.2;
+            ClipTransform tr; tr.scale = 0.4; tr.x = 0.2; solid.transform = tr;
+            Clip text(p.videoTracks[1].id, ClipKind::text, 0, 4);
+            text.text.string = QStringLiteral("HDR — HLG");
+            p.clips = {c, d, solid, text};
+            MediaRuntime hr; hr.color = SourceColor::hlg; m.runtimes[h.id] = hr;
+            MediaRuntime vr; m.runtimes[v.id] = vr;
+            const VideoFrame hf = p010, sf = nv12;
+            const Uuid hid = h.id;
+            auto frames = [hf, sf, hid](int, const PlanLayer& l, double) { return std::optional<VideoFrame>(l.asset == hid ? hf : sf); };
+            BuildOptions o; o.renderW = 320; o.renderH = 180; o.hdrOutput = hlgOut;
+            out.push_back({hlgOut ? QStringLiteral("hdr-hlg") : QStringLiteral("hdr-view"), *CompositionBuilder::build(p, m, o), 4.6, frames});
+        }
         return out;
     }
 
@@ -123,6 +148,16 @@ private slots:
             QCOMPARE(na.size(), nb.size());
             const double ndb = psnr(na, nb, &md);
             QVERIFY2(md <= 1 && ndb >= 50, qPrintable(QStringLiteral("%1 NV12: max %2, %3 dB").arg(c.name).arg(md).arg(ndb)));
+            if (c.plan.hdr == ER_HDR_HLG) {
+                // The HDR export's 10-bit frames: packed on the GPU, against the CPU's.
+                const auto pa = gpu->renderP010(job);
+                const auto pb = CpuRenderer::renderP010(job);
+                QCOMPARE(pa.size(), pb.size());
+                int worst = 0;
+                for (size_t i = 0; i < pa.size(); ++i) worst = std::max(worst, std::abs(int(pa[i] >> 6) - int(pb[i] >> 6)));
+                qInfo().noquote() << QStringLiteral("%1 P010: max |Δ| %2 (10-bit codes)").arg(c.name).arg(worst);
+                QVERIFY2(worst <= 1, qPrintable(QStringLiteral("%1 P010: max %2").arg(c.name).arg(worst)));
+            }
         }
     }
 

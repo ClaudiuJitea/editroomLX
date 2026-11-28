@@ -2,6 +2,9 @@
 // cuts on the song's beats, ending on a bar), and a real run on the test clips: a new cut from the library, then
 // the edit improved, each one undo step.
 #include "mcp/LocalImprover.h"
+#include "mcp/MagicAgent.h"
+#include "analysis/LocalBrain.h"
+#include <QFileInfo>
 #include "mcp/LocalMagic.h"
 #include "mcp/LocalPlanners.h"
 #include "mcp/MentionField.h"
@@ -249,6 +252,70 @@ private slots:
         QVERIFY(pauses.plan->result().duration() < 3.5);
     }
 
+    void mentionFolder() {
+        // The Mac's MENTION FOLDER self-test: a folder in Media, with the folders inside it; two folders of the same name
+        // told apart by their path; Magic and the AI apps told exactly which files it holds; "just this folder" and
+        // `:only` for its own files.
+        auto at = [](const QString& path) { MediaAsset a = asset(QFileInfo(path).fileName(), MediaKind::video, 5, false); a.path = path; return a; };
+        Project p;
+        const MediaAsset a = at("/tmp/er-shoot/Drone/a.mov"), b = at("/tmp/er-shoot/Drone/Day 2/b.mov");
+        const MediaAsset c = at("/tmp/er-shoot/c.mov"), d = at("/tmp/er-other/Drone/d.mov");
+        p.assets = {a, b, c, d};
+        MediaFolder f1; f1.path = "/tmp/er-shoot";
+        MediaFolder f2; f2.path = "/tmp/er-other";
+        p.folders = std::vector<MediaFolder>{f1, f2};
+        const auto folders = MagicMention::folderLabels(p);
+        std::set<QString> names;
+        for (const auto& f : folders) names.insert(f.name);
+        QCOMPARE(names, (std::set<QString>{"er-shoot", "er-shoot / Drone", "Day 2", "er-other", "er-other / Drone"}));
+        auto label = [&](const QString& path) { for (const auto& f : folders) if (f.path == path) return f; return MagicMention::FolderLabel{}; };
+        const auto found = MagicMention::find("cut a promo from @folder:er-shoot / Drone please", p.assets, {}, {}, folders);
+        QCOMPARE(found.size(), size_t(1));
+        QVERIFY(found[0].mention == MagicMention::folder("/tmp/er-shoot/Drone", false));
+        const auto drone = label("/tmp/er-shoot/Drone");
+        QCOMPARE((std::set<Uuid>(drone.files.begin(), drone.files.end())), (std::set<Uuid>{a.id, b.id}));
+        const auto day = MagicMention::find("use @folder:day 2", p.assets, {}, {}, folders);
+        QVERIFY(day.size() == 1 && day[0].mention == MagicMention::folder("/tmp/er-shoot/Drone/Day 2", false));
+        QCOMPARE(MagicMention::plain("use @folder:Day 2 now", p.assets, {}, {}, folders), QStringLiteral("use the files in the folder er-shoot / Drone / Day 2 (b.mov) now"));
+        const MagicPointers none{0, {}, std::nullopt};
+        auto idOf = [](const MediaAsset& x) { return x.id.toString(QUuid::WithoutBraces).toUpper(); };
+        const QString told = MagicAgent::pointing(none, "use @folder:er-shoot / Drone", p).value_or(QString());
+        QVERIFY(told.contains(idOf(a)) && told.contains(idOf(b)) && !told.contains(idOf(c)) && !told.contains(idOf(d)));
+        QVERIFY2(told.contains("Directly in \"er-shoot / Drone\": a.mov") && told.contains("In \"er-shoot / Drone / Day 2\": b.mov"), qPrintable(told));
+        // Only what's directly in it, when asked.
+        for (const char* ask : {"@folder:footage use only the clips directly in this folder and make a 10s clip", "@folder:footage just this folder, not the subfolders",
+                                "use @folder:footage but not the sub-folders", "@folder:footage top level only", "@folder:footage, not the folders inside it"})
+            QVERIFY2(MagicMention::onlyDirect(QLatin1String(ask)), ask);
+        for (const char* ask : {"@folder:footage use all the clips in this folder and make 10s clip", "make a promo from @folder:footage"})
+            QVERIFY2(!MagicMention::onlyDirect(QLatin1String(ask)), ask);
+        const auto shoot = label("/tmp/er-shoot");
+        QCOMPARE(shoot.filesFor("use @folder:er-shoot only, no subfolders"), std::vector<Uuid>{c.id});
+        QCOMPARE((std::set<Uuid>(shoot.files.begin(), shoot.files.end())), (std::set<Uuid>{a.id, b.id, c.id}));
+        // Local: "use all the media directly in @folder:…" keeps to that folder's files.
+        LocalRecipe local;
+        LocalBrain::applyMedia(local, {c}, "unchanged", "use all the media directly in this folder and cut to 12s video", {c.id}, true, true);
+        LocalRecipe asFiles;
+        LocalBrain::applyMedia(asFiles, {c}, "unchanged", "use all the media and add @c.mov too", {c.id}, true);
+        LocalRecipe shown;
+        LocalBrain::applyMedia(shown, {c, d}, "only", "use all the footage in just this folder", {c.id}, false, true);
+        QCOMPARE(local.keepOnly, std::set<Uuid>{c.id});
+        QVERIFY(asFiles.keepOnly.empty());
+        QCOMPARE(shown.keepOnly, std::set<Uuid>{c.id});
+        // Asked for just the folder: the AI is told only its own files, and to leave the sub-folders out.
+        const QString just = MagicAgent::pointing(none, "use all the media in just this folder @folder:er-shoot and make 10s video", p).value_or(QString());
+        QVERIFY2(just.contains("ONLY the 1 library file") && just.contains(idOf(c)) && !just.contains(idOf(a)) && !just.contains(idOf(b))
+                 && just.contains("2 files in its sub-folders"), qPrintable(just));
+        // "@folder:…:only": the folder's own files without words about it; offered only where there are folders inside.
+        const auto onlyFound = MagicMention::find("cut from @folder:er-shoot:only now", p.assets, {}, {}, folders);
+        QVERIFY(onlyFound.size() == 1 && onlyFound[0].mention == MagicMention::folder("/tmp/er-shoot", true) && onlyFound[0].length == 21);
+        const QString onlyTold = MagicAgent::pointing(none, "make a cut from @folder:er-shoot:only", p).value_or(QString());
+        QVERIFY(onlyTold.contains("ONLY the 1 library file") && !onlyTold.contains(idOf(a)));
+        QCOMPARE(MagicMention::plain("use @folder:er-shoot:only", p.assets, {}, {}, folders), QStringLiteral("use the files directly in the folder er-shoot (c.mov)"));
+        QVERIFY(shoot.hasSubfolders() && !label("/tmp/er-shoot/Drone/Day 2").hasSubfolders());
+        const auto dayOnly = MagicMention::find("@folder:Day 2:only", p.assets, {}, {}, folders);
+        QVERIFY(dayOnly.size() == 1 && dayOnly[0].mention == MagicMention::folder("/tmp/er-shoot/Drone/Day 2", false));
+    }
+
     void mentionField() {
         Controller c;
         auto a = asset(QStringLiteral("beach.mov"), MediaKind::video, 10);
@@ -323,6 +390,15 @@ private slots:
         window.resize(1000, 300);
         window.show();
         QVERIFY(QTest::qWaitForWindowExposed(&window));
+        // Outlines of the coming edit sit where its clips will be, on tracks it adds too (laid out as that project).
+        {
+            Project coming = c.model().project();
+            const Uuid v3 = coming.addTrack(TrackKind::video);
+            Clip onNew(v3, ClipKind::video, 1, 2);
+            QVERIFY(!canvas->rect(onNew));
+            const auto r = canvas->rect(onNew, coming);
+            QVERIFY(r && r->width() > 1 && r->height() > 10);
+        }
         MagicThinking* t = MagicThinking::begin(c, QStringLiteral("Local"), Qt::white);
         QVERIFY(t && MagicThinking::current() == t);
         QCOMPARE(t->stage(), MagicThinking::Stage::looking);

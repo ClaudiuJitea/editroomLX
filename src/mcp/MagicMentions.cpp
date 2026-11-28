@@ -1,5 +1,6 @@
 #include "MagicMentions.h"
 #include "editor/EditorModel.h"
+#include "model/MediaFolders.h"
 #include <QRegularExpression>
 #include <algorithm>
 #include <cmath>
@@ -42,6 +43,51 @@ QString tintName(Marker::Tint t) {
 QString bareName(const QString& name) { const int dot = name.lastIndexOf(u'.'); return dot > 0 ? name.left(dot) : name; }
 bool isWordChar(QChar c) { return c.isLetterOrNumber() || c == u'_'; }
 } // namespace
+
+std::vector<Uuid> MagicMention::FolderLabel::filesFor(const QString& request, bool only) const {
+    return (only || MagicMention::onlyDirect(request)) && !direct.empty() ? direct : files;
+}
+
+bool MagicMention::onlyDirect(const QString& request) {
+    QString t = request.toLower();
+    t.replace(u'-', u' ');
+    t.replace(QStringLiteral("sub folder"), QStringLiteral("subfolder"));
+    static const char* phrases[] = {"directly in", "top level", "only this folder", "only the folder", "only in this folder", "only in the folder",
+        "just this folder", "just the folder", "just in this folder", "only what's in", "only whats in",
+        "not the subfolder", "no subfolder", "without subfolder", "without the subfolder", "exclude subfolder",
+        "excluding subfolder", "excluding the subfolder", "skip the subfolder", "skip subfolder", "ignore the subfolder",
+        "ignore subfolder", "not subfolder", "not in subfolder", "not in the subfolder",
+        "not the folders inside", "not in the folders inside", "not the folders in", "not from the folders inside",
+        "without the folders inside", "ignore the folders inside", "skip the folders inside", "leave out the folders inside",
+        "not the nested", "no nested", "not nested"};
+    for (const char* ph : phrases) if (t.contains(QLatin1String(ph))) return true;
+    return false;
+}
+
+std::vector<MagicMention::FolderLabel> MagicMention::folderLabels(const Project& p) {
+    const MediaTree tree(p);
+    QStringList paths;
+    std::function<void(const std::optional<QString>&)> walk = [&](const std::optional<QString>& folder) {
+        for (const QString& f : tree.folders(folder)) { paths << f; walk(f); }
+    };
+    walk(std::nullopt);
+    std::vector<FolderLabel> found;
+    std::map<QString, int> count;
+    for (const QString& f : paths) {
+        FolderLabel l;
+        l.path = f;
+        l.name = MediaTree::name(f);
+        l.label = tree.label(f);
+        for (const auto& a : tree.assetsUnder(f, p.assets)) l.files.push_back(a.id);
+        if (l.files.empty()) continue;
+        for (const auto& a : tree.assetsIn(f, p.assets)) l.direct.push_back(a.id);
+        ++count[l.name.toLower()];
+        found.push_back(std::move(l));
+    }
+    // Two folders of the same name are told apart by their path in Media.
+    for (auto& l : found) if (count[l.name.toLower()] > 1) l.name = l.label;
+    return found;
+}
 
 std::vector<MagicMention::MarkerLabel> MagicMention::markerLabels(const Project& p) {
     std::map<QString, int> seen;
@@ -106,7 +152,7 @@ std::vector<MagicMention::ClipLabel> MagicMention::clipLabels(const Project& p) 
 }
 
 std::vector<MagicMention::Found> MagicMention::find(const QString& s, const std::vector<MediaAsset>& media, const std::vector<ClipLabel>& clips,
-                                                    const std::vector<MarkerLabel>& markers) {
+                                                    const std::vector<MarkerLabel>& markers, const std::vector<FolderLabel>& folders) {
     if (!s.contains(u'@')) return {};
     using Name = std::pair<QString, MagicMention>;
     std::vector<Name> names = {{QStringLiteral("playhead"), {Kind::playhead, {}}}, {QStringLiteral("selected"), {Kind::selected, {}}},
@@ -150,6 +196,12 @@ std::vector<MagicMention::Found> MagicMention::find(const QString& s, const std:
         } else if (starts(QStringLiteral("clip:"), i)) {
             from += 5;
             pool = clipNames;
+        } else if (starts(QStringLiteral("folder:"), i)) {
+            from += 7;
+            pool.clear();
+            for (const auto& f : folders) pool.push_back({f.name, MagicMention::folder(f.path, false)});
+            for (const auto& f : folders) if (f.hasSubfolders()) pool.push_back({f.name + QStringLiteral(":only"), MagicMention::folder(f.path, true)});
+            pool = longest(pool);
         }
         for (const auto& [name, mention] : pool) {
             const int len = int(name.size());
@@ -163,9 +215,10 @@ std::vector<MagicMention::Found> MagicMention::find(const QString& s, const std:
     return out;
 }
 
-QString MagicMention::plain(const QString& text, const std::vector<MediaAsset>& media, const std::vector<ClipLabel>& clips, const std::vector<MarkerLabel>& markers) {
+QString MagicMention::plain(const QString& text, const std::vector<MediaAsset>& media, const std::vector<ClipLabel>& clips, const std::vector<MarkerLabel>& markers,
+                           const std::vector<FolderLabel>& folders) {
     QString s = text;
-    const auto found = find(text, media, clips, markers);
+    const auto found = find(text, media, clips, markers, folders);
     for (auto it = found.rbegin(); it != found.rend(); ++it) {
         QString words = s.mid(it->at, it->length);
         switch (it->mention.kind) {
@@ -180,6 +233,18 @@ QString MagicMention::plain(const QString& text, const std::vector<MediaAsset>& 
             break;
         }
         case Kind::marker: for (const auto& m : markers) if (m.id == it->mention.id) words = clock(m.time); break;
+        case Kind::folder:
+            for (const auto& f : folders) {
+                if (f.path != it->mention.path) continue;
+                QStringList names;
+                for (const Uuid& id : f.filesFor(text, it->mention.only))
+                    for (const auto& a : media) if (a.id == id) { names << a.name; break; }
+                words = QStringLiteral("the files %1in the folder %2 (").arg(it->mention.only ? QStringLiteral("directly ") : QString(), f.label)
+                      + names.mid(0, 20).join(QStringLiteral(", "))
+                      + (names.size() > 20 ? QStringLiteral(", and %1 more").arg(names.size() - 20) : QString()) + u')';
+                break;
+            }
+            break;
         }
         s.replace(it->at, it->length, words);
     }

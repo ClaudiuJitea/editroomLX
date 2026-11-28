@@ -10,6 +10,11 @@
 #include <QSettings>
 #include <QMenuBar>
 #include "ui/MainWindow.h"
+#include "ui/Workspace.h"
+#include "mcp/LocalMagic.h"
+#include "mcp/MagicShow.h"
+#include "mcp/MagicThinking.h"
+#include <QPointer>
 #include "mcp/MCPServer.h"
 #include "Bench.h"
 #include "SelfTest.h"
@@ -59,6 +64,7 @@ static int roundtrip(const QString& in, const QString& out) {
 /// scripts/parity-diff.py compares these with the stored properties of the Swift structs.
 static int dumpSchema() {
     Project p;
+    p.hdr = true;
     MediaAsset a; a.relativePath = ""; a.playablePath = ""; a.bookmark = QByteArray("x");
     Clip c; c.assetID = newUuid(); c.fadeInCurve = FadeCurve::linear; c.fadeOutCurve = FadeCurve::linear; c.linkID = newUuid();
     c.grade = ColorGrade(); c.grade->look = "Mono"; c.transform = ClipTransform(); c.transform->zoom = ZoomMove();
@@ -211,7 +217,8 @@ int main(int argc, char** argv) {
     er::SingleInstance single;
     if (!testing) {
         QStringList handed;
-        for (qsizetype k = 1; k < args.size(); ++k) if (!args[k].startsWith(QLatin1String("--"))) handed << args[k];
+        for (qsizetype k = 1; k < args.size(); ++k)
+            if (!args[k].startsWith(QLatin1String("--")) && args[k - 1] != QLatin1String("--seek") && args[k - 1] != QLatin1String("--library-width")) handed << args[k];
         if (er::SingleInstance::handOff(handed)) return 0;
         single.listen();
     }
@@ -220,12 +227,28 @@ int main(int argc, char** argv) {
     er::Theme::apply();
     QApplication::setFont(er::Theme::font(13));
     er::Timecode::setCurrentStyle(QSettings().value(QLatin1String(er::Timecode::styleKey)).toString() == QLatin1String("simple") ? er::TimeStyle::simple : er::TimeStyle::timecode);
-    er::Controller controller;
-    er::MainWindow window(controller);
-    er::MCPServer mcp(controller);
+    const auto open = args.indexOf(QStringLiteral("--open"));
+    // Test launches (`--open`, `--selftest`) open one tab and leave the saved tabs and sessions alone.
+    const bool testLaunch = open >= 0 || args.contains(QStringLiteral("--selftest"));
+    er::Workspace workspace(!testLaunch && !args.contains(QStringLiteral("--dump-menu")));
+    // File › New, Open…, Open Recent: in tabs.
+    er::EditorModel::newTabHandler() = [&workspace] { workspace.newTab(); };
+    er::EditorModel::openHandler() = [&workspace](const QString& path) { workspace.open(path); };
+    er::MainWindow window(workspace);
+    er::Controller& first = window.controller();
+    er::MCPServer mcp(first);
     mcp.setEnabled(QSettings().value(QStringLiteral("agentsEnabled"), true).toBool());
     mcp.start();
-    er::MagicAgent agent(controller, mcp);
+    er::MagicAgent agent(first, mcp);
+    // While Magic works on the tab in front, it stays in front.
+    er::Workspace::lockedCheck() = [&agent, &window] {
+        return agent.running() || er::MagicShow::running() || er::MagicThinking::current() || er::LocalMagic::of(window.controller()).busy();
+    };
+    // Only the tab in front talks to the AI apps.
+    QObject::connect(&window, &er::MainWindow::controllerChanged, &window, [&mcp, &agent](er::Controller& c) {
+        mcp.setController(c);
+        agent.setController(c);
+    });
     er::SettingsDialog::agentApps() = {
         {QStringLiteral("Claude Code"), [] { return !er::MagicAgent::cli(er::MagicAgent::Kind::claude).isEmpty(); },
          [] { return er::AgentConnect::claudeCodeConnected(); }, er::AgentConnect::connectClaudeCode, er::AgentConnect::disconnectClaudeCode,
@@ -248,32 +271,28 @@ int main(int argc, char** argv) {
         },
         [&mcp] { return mcp.endpoint(); },
     };
+    QPointer<er::MagicPopover> popover;
     QObject::connect(&window, &er::MainWindow::magicRequested, &window, [&] {
-        auto* pop = new er::MagicPopover(controller, agent, &window);
+        auto* pop = new er::MagicPopover(window.controller(), agent, &window);
         pop->setAttribute(Qt::WA_DeleteOnClose);
+        popover = pop;
         pop->show();
     });
+    // The Magic panel belongs to the tab it was opened over.
+    QObject::connect(&workspace, &er::Workspace::aboutToSwitch, &window, [&popover] { if (popover) popover->close(); });
     if (args.contains(QStringLiteral("--dump-menu"))) return dumpMenu(window);
-    const auto open = args.indexOf(QStringLiteral("--open"));
-    controller.model().testLaunch = open >= 0 || args.contains(QStringLiteral("--selftest"));
     QStringList files;
-    for (qsizetype k = 1; k < args.size(); ++k) if (!args[k].startsWith(QLatin1String("--")) && (k == 0 || args[k - 1] != QLatin1String("--open"))) files << args[k];
+    // Files to open: every argument that isn't a flag or a flag's value.
+    static const QStringList takesValue = {QStringLiteral("--open"), QStringLiteral("--screenshot"), QStringLiteral("--seek"), QStringLiteral("--library-width")};
+    for (qsizetype k = 1; k < args.size(); ++k) if (!args[k].startsWith(QLatin1String("--")) && !takesValue.contains(args[k - 1])) files << args[k];
     if (open >= 0 && open + 1 < args.size()) {
-        controller.model().open(args[open + 1]);
+        window.controller().model().open(args[open + 1]);
     } else if (!files.isEmpty()) {
-        for (const QString& f : files) {
-            if (er::EditorModel::isProjectFile(f)) controller.model().open(f);
-            else controller.importFiles({f});
-        }
-    } else {
-        controller.model().restoreLastSession();
+        // Files that opened Editroom: projects in tabs; media in a new tab unless the one in front is empty.
+        workspace.openFromOutside(files, true);
     }
-    controller.model().startAutosaveTimer();
-    QObject::connect(&single, &er::SingleInstance::opened, &window, [&controller, &window](const QStringList& opened) {
-        for (const QString& f : opened) {
-            if (er::EditorModel::isProjectFile(f)) { if (controller.model().confirmDiscard()) controller.model().open(f); }
-            else controller.importFiles({f});
-        }
+    QObject::connect(&single, &er::SingleInstance::opened, &window, [&workspace, &window](const QStringList& opened) {
+        workspace.openFromOutside(opened, false);
         if (window.isMinimized()) window.showNormal();
         window.raise();
         window.activateWindow();
@@ -295,7 +314,7 @@ int main(int argc, char** argv) {
         const double seekTo = sk >= 0 && sk + 1 < args.size() ? args[sk + 1].toDouble() : -1;
         if (!window.isVisible()) window.show();
         window.resize(1480, 940);
-        QTimer::singleShot(1500, &window, [&controller, seekTo] { if (seekTo >= 0) controller.model().seek(seekTo); });
+        QTimer::singleShot(1500, &window, [&window, seekTo] { if (seekTo >= 0) window.controller().model().seek(seekTo); });
         QTimer::singleShot(4500, &window, [&window, out] { window.grab().save(out); QApplication::quit(); });
     }
     return app.exec();

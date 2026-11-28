@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QLineEdit>
 #include <QTest>
 
 using namespace er;
@@ -87,6 +88,31 @@ private slots:
         settle();
         QTest::keyClick(&d, Qt::Key_Escape);
         QVERIFY(!keys->combos(ShortcutAction::addMarker).empty());
+        // The dialog stays open after Esc cancels a recording.
+        QVERIFY(d.isVisible());
+        settle();
+        // Keys the dialog would otherwise take (Tab moves focus), and keys typed while the search field has the focus,
+        // are recorded too, as on the Mac (its recorder watches every key).
+        row = buttonWithText(&d, Shortcut::title(ShortcutAction::addMarker));
+        row->click();
+        settle();
+        QTest::keyClick(&d, Qt::Key_Tab, Qt::ControlModifier);
+        settle();
+        bool tab = false;
+        for (const auto& k : keys->combos(ShortcutAction::addMarker)) if (k.key == QLatin1String("tab") && k.command) tab = true;
+        QVERIFY(tab);
+        auto* search = d.findChild<QLineEdit*>();
+        QVERIFY(search);
+        row = buttonWithText(&d, Shortcut::title(ShortcutAction::setIn));
+        row->click();
+        settle();
+        search->setFocus();
+        QTest::keyClick(search, Qt::Key_J, Qt::ControlModifier | Qt::ShiftModifier);
+        settle();
+        QVERIFY(search->text().isEmpty());
+        bool j = false;
+        for (const auto& k : keys->combos(ShortcutAction::setIn)) if (k.key == QLatin1String("j") && k.command && k.shift) j = true;
+        QVERIFY(j);
         keys->resetAll();
         QVERIFY(!keys->isChanged(ShortcutAction::addMarker));
     }

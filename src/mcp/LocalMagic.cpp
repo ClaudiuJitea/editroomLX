@@ -320,9 +320,18 @@ void LocalMagic::run(const QString& typedWithMarkers) {
     const QString typed = MagicMention::markersAsTimes(typedWithMarkers.trimmed(), model.project());
     const MagicPointers pointers = MagicPointers::now(model);
     const Project p = model.project();
+    // Files named with @, and every file in a folder named with @folder:.
+    const auto folders = MagicMention::folderLabels(p);
     std::set<Uuid> pointed;
-    for (const auto& f : MagicMention::find(typed, p.assets)) if (f.mention.kind == MagicMention::Kind::media) pointed.insert(f.mention.id);
-    const QString r = MagicMention::plain(typed, p.assets, MagicMention::clipLabels(p)).trimmed();
+    bool namedFolder = false;
+    for (const auto& f : MagicMention::find(typed, p.assets, {}, {}, folders)) {
+        if (f.mention.kind == MagicMention::Kind::media) pointed.insert(f.mention.id);
+        if (f.mention.kind == MagicMention::Kind::folder) {
+            namedFolder = true;
+            for (const auto& fl : folders) if (fl.path == f.mention.path) for (const Uuid& id : fl.filesFor(typed, f.mention.only)) pointed.insert(id);
+        }
+    }
+    const QString r = MagicMention::plain(typed, p.assets, MagicMention::clipLabels(p), {}, folders).trimmed();
     // No request: Local's own improvement (or a new cut).
     if (r.isEmpty()) return start(LocalRecipe{});
     busy_ = true;
@@ -379,7 +388,7 @@ void LocalMagic::run(const QString& typedWithMarkers) {
     if (LocalRamp::asks(r)) return perform(LocalRamp::plan(typed, pointers, p));
 
     const bool hasEdit = std::any_of(p.clips.begin(), p.clips.end(), [](const Clip& c) { return c.kind == ClipKind::video || c.kind == ClipKind::image; });
-    LocalRecipe recipe = LocalBrain::recipe(r, p.assets, pointed, hasEdit, [this](const Uuid& id) { return c_.sceneTags(id); });
+    LocalRecipe recipe = LocalBrain::recipe(r, p.assets, pointed, hasEdit, [this](const Uuid& id) { return c_.sceneTags(id); }, namedFolder);
     if (recipe.levelAudio) {
         // Every audio clip on a track that's on, measured now, so they all read the same on the output meters.
         std::vector<Clip> clips;

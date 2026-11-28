@@ -90,8 +90,14 @@ void ExportDialog::build() {
     connect(shape, &QComboBox::activated, this, [this](int i) { settings_.shape = ExportSettings::Shape(i); settings_.reframeX = settings_.reframeY = 0.5; });
     form->addRow(QStringLiteral("Shape"), shape);
     auto* codec = new QComboBox;
-    codec->addItems({QStringLiteral("H.264"), QStringLiteral("HEVC")});
-    connect(codec, &QComboBox::activated, this, [this](int i) { settings_.codec = ExportSettings::Codec(i); });
+    if (c_.model().project().isHDR()) {
+        // An HDR project is always 10-bit HEVC in HLG (H.264 can't carry HDR).
+        codec->addItem(QStringLiteral("HEVC · HDR (HLG)"));
+        codec->setToolTip(QStringLiteral("HEVC · HDR (HLG, 10-bit)\nH.264 can't carry HDR. For an SDR file, set the sequence to SDR."));
+    } else {
+        codec->addItems({QStringLiteral("H.264"), QStringLiteral("HEVC")});
+        connect(codec, &QComboBox::activated, this, [this](int i) { settings_.codec = ExportSettings::Codec(i); });
+    }
     form->addRow(QStringLiteral("Codec"), codec);
     auto* quality = new QComboBox;
     quality->addItems({QStringLiteral("High"), QStringLiteral("Web")});

@@ -34,6 +34,9 @@ public:
     std::vector<uint8_t> render(const FrameJob& job);
     std::vector<float> renderFloat(const FrameJob& job);
     std::vector<uint8_t> renderNV12(const FrameJob& job);
+    /// An HDR project's export frame as P010 (BT.2020 limited range), packed on the GPU (pack.comp): read back at
+    /// 3 bytes a pixel, not the composite's 16.
+    std::vector<uint16_t> renderP010(const FrameJob& job);
 
     /// The VkInstance, for making a window's surface on it (QVulkanInstance::setVkInstance); none when presenting
     /// isn't possible (no surface or swapchain support).
@@ -43,6 +46,8 @@ public:
     bool setSurface(void* surface, int width, int height);
     /// Composes the frame and presents it in the window: nothing read back. False when it couldn't (then render).
     bool present(const FrameJob& job);
+    /// The part of the frame the window shows (0…1 across and down): all of it, or what's in view of a zoomed viewer.
+    void setPresentRegion(double x0, double y0, double x1, double y1);
 
     /// DMA-BUF frames imported so far (decoded frames that never went through memory).
     long long dmabufImports() const;

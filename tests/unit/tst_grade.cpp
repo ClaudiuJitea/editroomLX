@@ -1,5 +1,7 @@
 // Grade maths: the FILM PRINT check from SelfTest.swift, recipes, wheels, .cube files and the baker.
 #include "model/ColorGrade.h"
+#include "model/Codec.h"
+#include <QJsonDocument>
 #include <QTest>
 #include <cmath>
 
@@ -90,6 +92,40 @@ private slots:
         auto half = GradeBaker::cube(mono);
         const size_t red = size_t(n - 1) * 4; // r = 1, g = b = 0
         QVERIFY((*half)[red] < 1.0f && (*half)[red + 1] > 0.0f);
+    }
+
+    void levels() {
+        // The Mac's GRADE LEVELS self-test: a grade from before has none (and still opens), lifting the shadows
+        // brightens the darks more than the brights, pulling the highlights down darkens the brights more, it's kept,
+        // and an off grade draws nothing, is kept, and comes back.
+        const QByteArray old = R"({"look":"Mono","lookIntensity":1,"exposure":0.5,"contrast":0,"saturation":0,"temperature":0,"tint":0})";
+        const ColorGrade before = codec::decodeGrade(QJsonDocument::fromJson(old).object());
+        QCOMPARE(before.shadowsLevel, 0.0);
+        QVERIFY(!before.off);
+        QCOMPARE(ColorGrade::levelOffset(100), 0.2);
+        QCOMPARE(ColorGrade::levelOffset(-250), -0.2);
+        const int n = GradeBaker::dimension;
+        auto grey = [n](const std::vector<float>& c, int i) { return c[((size_t(i) * n + i) * n + i) * 4]; };
+        ColorGrade lift; lift.shadowsLevel = 60;
+        auto lc = GradeBaker::cube(lift);
+        QVERIFY(lc && !lift.isNeutral());
+        const int dark = n / 6, bright = n - 1 - n / 6;
+        const double darkUp = grey(*lc, dark) - double(dark) / (n - 1), brightUp = grey(*lc, bright) - double(bright) / (n - 1);
+        QVERIFY2(darkUp > 0.01 && darkUp > brightUp * 2, qPrintable(QStringLiteral("%1 %2").arg(darkUp).arg(brightUp)));
+        ColorGrade pull; pull.highlightsLevel = -60;
+        auto pc = GradeBaker::cube(pull);
+        const double darkDown = double(dark) / (n - 1) - grey(*pc, dark), brightDown = double(bright) / (n - 1) - grey(*pc, bright);
+        QVERIFY2(brightDown > 0.01 && brightDown > darkDown * 2, qPrintable(QStringLiteral("%1 %2").arg(darkDown).arg(brightDown)));
+        // Kept through a save.
+        const ColorGrade kept = codec::decodeGrade(codec::encode(lift));
+        QCOMPARE(kept.shadowsLevel, 60.0);
+        // Off: nothing drawn, still not neutral (the grade is kept), and back on gives the same cube.
+        ColorGrade off = lift; off.off = true;
+        QVERIFY(!GradeBaker::cube(off));
+        QVERIFY(!off.isNeutral());
+        QVERIFY(codec::decodeGrade(codec::encode(off)).off);
+        off.off = false;
+        QCOMPARE(GradeBaker::cube(off).get(), lc.get());
     }
 };
 

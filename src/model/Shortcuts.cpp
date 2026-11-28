@@ -73,6 +73,8 @@ const Row rows[] = {
     {A::new_, "new", "New", "File"}, {A::open, "open", "Open…", "File"}, {A::save, "save", "Save", "File"},
     {A::saveAs, "saveAs", "Save As…", "File"}, {A::importMedia, "importMedia", "Import Media…", "File"},
     {A::export_, "export", "Export…", "File"},
+    {A::newTab, "newTab", "New Tab", "Tabs"}, {A::closeTab, "closeTab", "Close Tab", "Tabs"},
+    {A::previousTab, "previousTab", "Show Previous Tab", "Tabs"}, {A::nextTab, "nextTab", "Show Next Tab", "Tabs"},
     {A::undo, "undo", "Undo", "Edit"}, {A::redo, "redo", "Redo", "Edit"},
     {A::playPause, "playPause", "Play / Pause", "Playback"}, {A::stepBack, "stepBack", "Back One Frame", "Playback"},
     {A::stepForward, "stepForward", "Forward One Frame", "Playback"}, {A::previousEdit, "previousEdit", "Previous Edit", "Playback"},
@@ -110,7 +112,7 @@ std::optional<A> Shortcut::fromRaw(const QString& s) {
 QString Shortcut::title(A a) { return QString::fromUtf8(row(a).title); }
 QString Shortcut::group(A a) { return QString::fromLatin1(row(a).group); }
 const std::vector<QString>& Shortcut::groups() {
-    static const std::vector<QString> g{"File", "Edit", "Playback", "Tools", "Clip", "Mark", "View"};
+    static const std::vector<QString> g{"File", "Tabs", "Edit", "Playback", "Tools", "Clip", "Mark", "View"};
     return g;
 }
 
@@ -134,6 +136,10 @@ std::vector<KeyCombo> Shortcut::defaults(A a) {
     case A::saveAs: return {cmd("s", true)};
     case A::importMedia: return {cmd("i")};
     case A::export_: return {cmd("e")};
+    case A::newTab: return {cmd("t")};
+    case A::closeTab: return {cmd("w")};
+    case A::previousTab: return {cmd("[", true)};
+    case A::nextTab: return {cmd("]", true)};
     case A::undo: return {cmd("z")};
     case A::redo: return {cmd("z", true)};
     case A::playPause: return {key("space")};
@@ -159,7 +165,8 @@ std::vector<KeyCombo> Shortcut::defaults(A a) {
     case A::rippleDelete: return {key("delete", true), key("forwardDelete", true)};
     case A::rippleTrimStart: return {key("q")};
     case A::rippleTrimEnd: return {key("w")};
-    case A::addText: return {cmd("t")};
+    // ⌃T (Meta+T), as in Final Cut Pro (Ctrl+T is New Tab).
+    case A::addText: return {K(QStringLiteral("t"), false, false, false, true)};
     // As in Final Cut Pro (Reveal in Browser).
     case A::revealInMedia: return {KeyCombo(QStringLiteral("f"), false, true)};
     case A::addMarker: return {key("m")};

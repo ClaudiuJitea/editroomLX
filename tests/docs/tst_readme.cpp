@@ -25,8 +25,9 @@ using namespace er;
 class TestReadme : public QObject {
     Q_OBJECT
     QString shots, media;
-    std::unique_ptr<Controller> c;
+    std::unique_ptr<Workspace> ws;
     std::unique_ptr<MainWindow> w;
+    Controller* c = nullptr;
     std::map<QString, MediaAsset> assets;
     Uuid graded, title;
 
@@ -44,8 +45,9 @@ private slots:
         Theme::loadFonts();
         Theme::setCurrent(AppTheme::grey);
         Theme::apply();
-        c = std::make_unique<Controller>();
-        w = std::make_unique<MainWindow>(*c);
+        ws = std::make_unique<Workspace>(false);
+        w = std::make_unique<MainWindow>(*ws);
+        c = &w->controller();
         w->resize(1600, 1000);
         w->show();
         QVERIFY(QTest::qWaitForWindowExposed(w.get()));
@@ -181,7 +183,8 @@ private slots:
 
     void cleanupTestCase() {
         w.reset();
-        c.reset();
+        c = nullptr;
+        ws.reset();
     }
 };
 

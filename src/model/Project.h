@@ -199,6 +199,10 @@ struct Project {
     int width = 1920;
     int height = 1080;
     double fps = 30;
+    /// HDR (HLG, Rec.2020, 10-bit): HDR footage keeps its range in the viewer and the export, SDR sits at
+    /// standard white within it. Nil is SDR (Rec.709), as every project was before.
+    std::optional<bool> hdr;
+    bool isHDR() const { return hdr == true; }
     bool settingsLocked = false;
     /// Index 0 is the bottom-most video track (V1).
     std::vector<Track> videoTracks{Track(TrackKind::video), Track(TrackKind::video)};

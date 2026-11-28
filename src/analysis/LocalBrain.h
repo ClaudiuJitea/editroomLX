@@ -23,8 +23,9 @@ bool wantsSoundEffects(const QString& request);
 bool wantsLevels(const QString& request);
 std::vector<MediaAsset> soundEffects(const Project& p);
 std::optional<double> speed(const QString& request);
+/// `folder`: a folder was named with @folder:, so "all" means all of that folder, not those as well as the rest.
 void applyMedia(LocalRecipe& r, const std::vector<MediaAsset>& named, const QString& action, const QString& request,
-                const std::set<Uuid>& pointed = {}, bool hasEdit = false);
+                const std::set<Uuid>& pointed = {}, bool hasEdit = false, bool folder = false);
 LocalRecipe checked(const LocalRecipe& r, const QString& request);
 std::vector<MediaAsset> named(const QString& request, const std::vector<MediaAsset>& media);
 std::vector<MediaAsset> showing(const QStringList& words, const std::vector<MediaAsset>& media, const Shows& shows);
@@ -35,6 +36,7 @@ bool titleAtEnd(const QString& request);
 bool captionsRemoved(const QString& request);
 bool captionsWithCut(const QString& request);
 /// Reads a request into a recipe, with everything the Mac's popover adds after its model's reading.
-LocalRecipe recipe(const QString& request, const std::vector<MediaAsset>& media, const std::set<Uuid>& pointed, bool hasEdit, const Shows& shows);
+LocalRecipe recipe(const QString& request, const std::vector<MediaAsset>& media, const std::set<Uuid>& pointed, bool hasEdit, const Shows& shows,
+                   bool folder = false);
 
 } // namespace er::LocalBrain

@@ -161,10 +161,11 @@ std::vector<QRectF> MagicThinking::mediaRects(const std::optional<std::set<Uuid>
     return out;
 }
 
-std::optional<QRectF> MagicThinking::clipRect(const Clip& c, const Project&) const {
+std::optional<QRectF> MagicThinking::clipRect(const Clip& c, const Project& project) const {
     TimelineCanvas* cv = TimelineCanvas::current();
     if (!cv) return std::nullopt;
-    auto r = cv->rect(c);
+    // Laid out as the project the clip is in (the coming edit's, with any tracks it adds), as the Mac's magicWindowRect.
+    auto r = cv->rect(c, project);
     if (!r) return std::nullopt;
     return QRectF(r->topLeft() + QPointF(cv->mapTo(parentWidget(), QPoint(0, 0))), r->size());
 }

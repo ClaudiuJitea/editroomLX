@@ -103,6 +103,21 @@ int runBench(const QString& dirIn) {
             log(QStringLiteral("BENCH B1 compose+NV12 3840x2160 GPU %1").arg(ms(measure([&] { gpu->renderNV12(job); }))));
         }
         log(QStringLiteral("BENCH B1 describe+decode (frame at 7.8 s, cached chunk) %1").arg(ms(measure([&] { describeFrame(plan, 7.8, media.provider(3840)); }))));
+        // The same edit as an HDR (HLG) project's export: linear Rec.2020, the grade on the HLG signal, P010 out.
+        p.hdr = true;
+        BuildOptions h = o;
+        h.hdrOutput = true;
+        auto hdrPlan = *CompositionBuilder::build(p, media, h);
+        const FrameJob hdrJob = describeFrame(hdrPlan, 7.8, media.provider(3840));
+        log(QStringLiteral("BENCH B1 compose 3840x2160 HDR (HLG) CPU %1").arg(ms(measure([&] { CpuRenderer::render(hdrJob); }, 3))));
+        if (gpu) {
+            gpu->renderFloat(hdrJob);
+            log(QStringLiteral("BENCH B1 compose 3840x2160 HDR (HLG) GPU %1, GPU time %2 ms").arg(ms(measure([&] { gpu->render(hdrJob); }))).arg(gpuMedian(*gpu, hdrJob), 0, 'f', 2));
+            log(QStringLiteral("BENCH B1 compose+P010 3840x2160 HDR GPU %1").arg(ms(measure([&] { gpu->renderP010(hdrJob); }))));
+            log(QStringLiteral("BENCH B1 compose+P010 3840x2160 HDR GPU float, packed on the CPU (before) %1").arg(ms(measure([&] {
+                CpuRenderer::packP010(gpu->renderFloat(hdrJob), 3840, 2160);
+            }))));
+        }
     }
     // B2: compose a 6K source onto a 4K canvas.
     if (want("B2"))

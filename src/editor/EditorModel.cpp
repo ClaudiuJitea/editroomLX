@@ -23,6 +23,8 @@ static bool boolSetting(const char* key, bool def) {
 static void setBoolSetting(const char* key, bool v) { QSettings().setValue(QLatin1String(key), v); }
 
 EditorModel::EditorModel(EditorHost* host, QObject* parent) : QObject(parent), host_(host ? host : &nullHost_) {
+    static quint64 serials = 0;
+    serial_ = ++serials;
     skimming_ = boolSetting("skimming", true);
     thumbnails_ = boolSetting("thumbnails", true);
     audioScrub_ = boolSetting("audioScrub", false);
@@ -75,33 +77,81 @@ void EditorModel::setAudioScrub(bool on) {
 void EditorModel::setSticky(bool on) { sticky_ = on; setBoolSetting("stickyEdges", on); }
 void EditorModel::setLoop(bool on) { loop_ = on; setBoolSetting("loopPlayback", on); }
 
+void EditorModel::reloadSharedSettings() {
+    skimming_ = boolSetting("skimming", true);
+    thumbnails_ = boolSetting("thumbnails", true);
+    audioScrub_ = boolSetting("audioScrub", false);
+    sticky_ = boolSetting("stickyEdges", false);
+    loop_ = boolSetting("loopPlayback", false);
+}
+
 // MARK: Autosave and recovery
 
-QString EditorModel::recoveryPath() {
+QString EditorModel::recoveryPath(const QString& slot, bool test) {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Editroom/Recovery");
     QDir().mkpath(dir);
-    return dir + QStringLiteral("/Untitled.room");
+    if (test) return dir + QStringLiteral("/Untitled (test).room");
+    return dir + (slot.isEmpty() ? QStringLiteral("/Untitled.room") : QStringLiteral("/Untitled %1.room").arg(slot));
+}
+QString EditorModel::recoveryPath() const { return recoveryPath(slot_, testLaunch); }
+
+std::optional<QString> EditorModel::savedSession(const QString& slot) {
+    QSettings s;
+    const QString k = slotKey(slot, QStringLiteral("lastSession"));
+    if (!s.contains(k)) return std::nullopt;
+    return s.value(k).toString();
+}
+std::optional<QString> EditorModel::savedRecoveryFor(const QString& slot) {
+    QSettings s;
+    const QString k = slotKey(slot, QStringLiteral("recoveryFor"));
+    if (!s.contains(k)) return std::nullopt;
+    return s.value(k).toString();
 }
 
-std::optional<QString> EditorModel::lastSession() const {
-    QSettings s;
-    if (!s.contains(QStringLiteral("lastSession"))) return std::nullopt;
-    return s.value(QStringLiteral("lastSession")).toString();
-}
+std::optional<QString> EditorModel::lastSession() const { return savedSession(slot_); }
 void EditorModel::setLastSession(const std::optional<QString>& v) {
     if (testLaunch) return;
     QSettings s;
-    if (v) s.setValue(QStringLiteral("lastSession"), *v); else s.remove(QStringLiteral("lastSession"));
+    const QString k = slotKey(slot_, QStringLiteral("lastSession"));
+    if (v) s.setValue(k, *v); else s.remove(k);
 }
-std::optional<QString> EditorModel::recoveryFor() const {
-    QSettings s;
-    if (!s.contains(QStringLiteral("recoveryFor"))) return std::nullopt;
-    return s.value(QStringLiteral("recoveryFor")).toString();
-}
+std::optional<QString> EditorModel::recoveryFor() const { return savedRecoveryFor(slot_); }
 void EditorModel::setRecoveryFor(const std::optional<QString>& v) {
+    if (testLaunch) return;
     QSettings s;
-    if (v) s.setValue(QStringLiteral("recoveryFor"), *v); else s.remove(QStringLiteral("recoveryFor"));
+    const QString k = slotKey(slot_, QStringLiteral("recoveryFor"));
+    if (v) s.setValue(k, *v); else s.remove(k);
 }
+
+bool EditorModel::isBlank() const {
+    return fileUrl_.isEmpty() && project_.clips.empty() && project_.assets.empty() && (!project_.folders || project_.folders->empty());
+}
+
+bool EditorModel::closeProject() {
+    if (isBlank()) return true;
+    if (!confirmDiscard()) return false;
+    load(Project(), QString());
+    QFile::remove(recoveryPath());
+    setRecoveryFor(std::nullopt);
+    lastRecovered_.reset();
+    setLastSession(std::nullopt);
+    emit changed();
+    return true;
+}
+
+void EditorModel::forgetSlot() {
+    QFile::remove(recoveryPath());
+    if (testLaunch) return;
+    QSettings s;
+    s.remove(slotKey(slot_, QStringLiteral("lastSession")));
+    s.remove(slotKey(slot_, QStringLiteral("recoveryFor")));
+    autosaveTimer_.stop();
+}
+
+std::function<void()>& EditorModel::newTabHandler() { static std::function<void()> f; return f; }
+std::function<void(const QString&)>& EditorModel::openHandler() { static std::function<void(const QString&)> f; return f; }
+
+EditorModel::Clipboard& EditorModel::sharedClipboard() { static Clipboard c; return c; }
 
 bool EditorModel::autosaves() { return boolSetting(autosaveKey, true); }
 
@@ -1289,8 +1339,18 @@ void EditorModel::copySelection() {
     if (clips.empty()) return;
     double t0 = clips[0].start;
     for (const auto& c : clips) t0 = std::min(t0, c.start);
+    std::set<Uuid> used;
+    Clipboard board;
+    for (const auto& c : clips) {
+        if (c.assetID) used.insert(*c.assetID);
+        if (c.reversedFrom) used.insert(c.reversedFrom->assetID);
+        if (auto i = project_.trackIndex(c.trackID, trackKindOf(c.kind))) board.trackIndex[c.id] = *i;
+    }
     for (auto& c : clips) c.start -= t0;
-    clipboard_ = clips;
+    board.clips = clips;
+    for (const auto& a : project_.assets) if (used.count(a.id)) board.assets.push_back(a);
+    board.source = serial_;
+    sharedClipboard() = board;
 }
 
 void EditorModel::cutSelection() {
@@ -1299,12 +1359,57 @@ void EditorModel::cutSelection() {
 }
 
 void EditorModel::paste() {
-    const auto copies = placed(clipboard_, playhead_);
-    if (copies.empty()) return;
-    insert(copies);
+    const Clipboard board = sharedClipboard();
+    if (board.clips.empty()) return;
+    if (board.source == serial_) {
+        const auto copies = placed(board.clips, playhead_);
+        insert(copies);
+        double end = copies[0].end();
+        for (const auto& c : copies) end = std::max(end, c.end());
+        seek(end);
+        return;
+    }
+    // From another project: its media is found here by file, or added to Media (the same files on disk), and its clips
+    // go on the tracks in the same places.
+    commitLive();
+    std::map<Uuid, Uuid> map;
+    std::vector<MediaAsset> added;
+    for (const auto& a : board.assets) {
+        const MediaAsset* here = nullptr;
+        for (const auto& x : project_.assets) if (x.id == a.id || x.path == a.path) { here = &x; break; }
+        if (here) map[a.id] = here->id;
+        else { added.push_back(a); map[a.id] = a.id; }
+    }
+    std::vector<Clip> clips;
+    for (const Clip& original : board.clips) {
+        Clip c = original;
+        if (c.assetID) if (auto it = map.find(*c.assetID); it != map.end()) c.assetID = it->second;
+        if (c.reversedFrom) if (auto it = map.find(c.reversedFrom->assetID); it != map.end()) c.reversedFrom->assetID = it->second;
+        const TrackKind kind = trackKindOf(c.kind);
+        const auto& tracks = project_.tracks(kind);
+        auto i = board.trackIndex.find(original.id);
+        if (i != board.trackIndex.end() && i->second < tracks.size() && !tracks[i->second].locked) c.trackID = tracks[i->second].id;
+        else c.trackID = kind == TrackKind::video ? TrackToken::newVideo() : TrackToken::newAudio();
+        clips.push_back(c);
+    }
+    const auto copies = placed(clips, playhead_);
+    IdSet ids;
+    for (const auto& c : copies) ids.insert(c.id);
+    if (!added.empty()) {
+        // The library isn't undone: the media comes in first, then the clips as one step.
+        changeLibrary([&](Project& p) { p.assets.insert(p.assets.end(), added.begin(), added.end()); });
+        host_->expect(added);
+    }
+    mutate([&](Project& p) {
+        p.clips.insert(p.clips.end(), copies.begin(), copies.end());
+        p.materializeTokens();
+        p.resolveOverlaps(ids);
+    });
+    setSelection(ids);
     double end = copies[0].end();
     for (const auto& c : copies) end = std::max(end, c.end());
     seek(end);
+    if (!added.empty()) setNeedsRebuild();
 }
 
 void EditorModel::duplicateSelection() {
@@ -1326,7 +1431,8 @@ std::vector<Clip> EditorModel::placed(const std::vector<Clip>& clips, double t) 
             c.linkID = links[*c.linkID];
         }
         c.start += t;
-        if (!project_.track(c.trackID) || project_.isLocked(c.trackID)) {
+        const bool token = c.trackID == TrackToken::newVideo() || c.trackID == TrackToken::newAudio();
+        if (!token && (!project_.track(c.trackID) || project_.isLocked(c.trackID))) {
             const TrackKind kind = trackKindOf(c.kind);
             std::optional<Uuid> open;
             for (const auto& tr : project_.tracks(kind)) if (!tr.locked) { open = tr.id; break; }
@@ -1459,7 +1565,13 @@ bool EditorModel::sequenceMatches(const MediaAsset& a) const {
 
 void EditorModel::matchSequence(const MediaAsset& a) {
     if (a.kind != MediaKind::video || a.width <= 0 || a.height <= 0) return;
+    // Frame size and rate only: HDR is picked by hand (Dynamic range), never by matching an iPhone clip.
     mutate([&](Project& p) { p.width = a.width; p.height = a.height; p.fps = standardFPS(a.fps); p.settingsLocked = true; });
+}
+
+void EditorModel::setHDR(bool on) {
+    if (project_.isHDR() == on) return;
+    mutate([&](Project& p) { p.hdr = on ? std::optional<bool>(true) : std::nullopt; p.settingsLocked = true; });
 }
 
 void EditorModel::setFPS(double fps) {
@@ -1530,6 +1642,8 @@ bool EditorModel::confirmDiscard(bool quitting) {
 }
 
 void EditorModel::newProject() {
+    // File › New: a new tab.
+    if (newTabHandler()) { newTabHandler()(); return; }
     if (!confirmDiscard()) return;
     load(Project(), QString());
     QFile::remove(recoveryPath());
@@ -1557,6 +1671,7 @@ void EditorModel::openRecent(const QString& path) {
         emit errorRaised(msg);
         return;
     }
+    if (openHandler()) { openHandler()(path); return; }
     if (!confirmDiscard()) return;
     open(path);
 }
@@ -1567,9 +1682,11 @@ void EditorModel::clearRecents() {
 }
 
 void EditorModel::openProject() {
-    if (!confirmDiscard()) return;
+    // With tabs, nothing open is closed: the project opens in a tab of its own.
+    if (!openHandler() && !confirmDiscard()) return;
     const QString path = host_->chooseProjectFile();
-    if (!path.isEmpty()) open(path);
+    if (path.isEmpty()) return;
+    if (openHandler()) openHandler()(path); else open(path);
 }
 
 void EditorModel::save() {

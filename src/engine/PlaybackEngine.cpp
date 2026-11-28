@@ -6,10 +6,41 @@
 
 namespace er {
 
+namespace {
+/// The GPU every player shares (tabs), made once; and who uses it and its window surface.
+std::mutex& gpuLock() { static std::mutex m; return m; }
+std::shared_ptr<GpuRenderer> sharedGpu() {
+    static std::mutex m;
+    static std::weak_ptr<GpuRenderer> kept;
+    std::lock_guard g(m);
+    if (auto gpu = kept.lock()) return gpu;
+    std::shared_ptr<GpuRenderer> gpu(GpuRenderer::create().release());
+    kept = gpu;
+    return gpu;
+}
+const PlaybackEngine*& surfaceOwner() { static const PlaybackEngine* owner = nullptr; return owner; }
+} // namespace
+
 PlaybackEngine::PlaybackEngine(MediaStore& media, SoundStore& sound, QObject* parent)
     : QObject(parent), media_(media), sound_(sound) {
-    gpu_ = GpuRenderer::create();
+    gpu_ = sharedGpu();
     thread_ = std::thread([this] { renderLoop(); });
+}
+
+void PlaybackEngine::unload() {
+    pause();
+    audio_.setPlan(AudioPlan{});
+    {
+        std::lock_guard g(lock_);
+        plan_.reset();
+        wanted_.reset();
+        wantedScrub_ = false;
+        duration_ = 0;
+        project_ = Project();
+        shownTime_ = -1;
+    }
+    presenting_ = false;
+    wake_.notify_all();
 }
 
 PlaybackEngine::~PlaybackEngine() {
@@ -19,14 +50,40 @@ PlaybackEngine::~PlaybackEngine() {
     }
     wake_.notify_all();
     thread_.join();
+    std::lock_guard gl(gpuLock());
+    if (surfaceOwner() == this) { if (gpu_) gpu_->setSurface(nullptr, 0, 0); surfaceOwner() = nullptr; }
 }
 
 bool PlaybackEngine::setPresentSurface(void* surface, int w, int h) {
     if (!gpu_) return false;
+    std::lock_guard gl(gpuLock());
+    // Letting go of a surface another tab's viewer has since taken leaves that one alone.
+    if (!surface && surfaceOwner() != this) {
+        hasSurface_ = false;
+        presenting_ = false;
+        return true;
+    }
     const bool ok = gpu_->setSurface(surface, w, h);
+    surfaceOwner() = surface && ok ? this : nullptr;
+    // The part in view is this viewer's, not the last one's.
+    if (surface && ok) gpu_->setPresentRegion(region_[0], region_[1], region_[2], region_[3]);
     hasSurface_ = surface && ok;
     if (!hasSurface_) presenting_ = false;
     return ok;
+}
+
+void PlaybackEngine::setPresentRegion(double x0, double y0, double x1, double y1) {
+    if (!gpu_) return;
+    const std::array<double, 4> r{x0, y0, x1, y1};
+    {
+        std::lock_guard gl(gpuLock());
+        if (surfaceOwner() != this) return;
+        gpu_->setPresentRegion(x0, y0, x1, y1);
+        if (r == region_) return;
+        region_ = r;
+    }
+    // Paused, the frame showing is presented again with the new part in view (scrolled).
+    if (presenting_) redraw();
 }
 
 void PlaybackEngine::setPresenting(bool on) {
@@ -193,11 +250,13 @@ void PlaybackEngine::renderLoop() {
                 };
             }
             const FrameJob job = describeFrame(*plan, t, provider);
+            std::unique_lock gl(gpuLock());
             // Straight into the viewer's window when it's presenting; else read back as an image.
-            if (presenting_ && gpu_ && gpu_->present(job)) {
+            if (presenting_ && gpu_ && surfaceOwner() == this && gpu_->present(job)) {
                 presented = true;
             } else {
                 std::vector<uint8_t> px = gpu_ ? gpu_->render(job) : std::vector<uint8_t>();
+                gl.unlock();
                 if (px.empty()) px = CpuRenderer::render(job);
                 image = QImage(plan->outW, plan->outH, QImage::Format_RGBX8888);
                 for (int y = 0; y < plan->outH; ++y) std::memcpy(image.scanLine(y), px.data() + size_t(y) * plan->outW * 4, size_t(plan->outW) * 4);

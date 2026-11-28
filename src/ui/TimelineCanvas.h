@@ -32,6 +32,9 @@ public:
     double time(double x) const { return (x + view().scrollX) / view().pps; }
     /// Where a clip is drawn (none for a track not shown).
     std::optional<QRectF> rect(const Clip& c) const;
+    /// Where a clip of another version of the project would sit (Magic's outlines of the coming edit, whose tracks may
+    /// not be there yet): laid out as that project's tracks would be, at this view's zoom and scroll.
+    std::optional<QRectF> rect(const Clip& c, const Project& in) const;
     /// The timeline on screen, for Magic's cursors (none when there isn't one).
     static TimelineCanvas* current();
     /// The wheel and pinch from the track headers beside it scroll and zoom it too.

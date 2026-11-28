@@ -21,7 +21,26 @@ namespace er {
 class Transcripts : public QObject {
     Q_OBJECT
 public:
-    enum class State { waiting, working, ready, failed };
+    /// `unsupported`: the speech language (Settings › General) can't be heard by the speech model.
+    enum class State { waiting, working, ready, failed, unsupported };
+
+    /// The speech language Settings › General picked ("" for Automatic: heard from the speech itself). The Mac's key;
+    /// a Mac's locale identifier ("es_ES") reads as its language.
+    static constexpr const char* languageKey = "speechLanguage";
+    static QString chosenLanguage();
+    /// The language transcripts are made in: whisper's code for it ("es"; "auto" for Automatic), or none when the
+    /// speech model can't hear it, with the language's name for saying so.
+    struct Language { std::optional<QString> code; QString name; };
+    static Language resolve();
+    /// The languages the speech model can hear (code, name), for Settings, by name.
+    static std::vector<std::pair<QString, QString>> supportedLanguages();
+    /// A language's name, in English ("Spanish"), from a code or a locale identifier.
+    static QString languageName(const QString& identifier);
+    /// The speech language was changed in Settings: what was heard in another language is heard again.
+    void languageChanged();
+    /// The language's name when it can't be heard (once a file has been tried in it), for saying so.
+    QString unsupportedLanguage() const;
+    bool unsupported(const QString& path) const { return state(path) == State::unsupported; }
 
     explicit Transcripts(QObject* parent = nullptr);
     ~Transcripts() override;
@@ -65,6 +84,7 @@ private:
     std::map<QString, State> states_;
     std::deque<QString> queue_;
     std::optional<QString> working_;
+    QString unsupportedLanguage_;
     std::set<QString> stale_;
     std::map<QString, std::vector<std::function<void(std::optional<Transcript>)>>> waiters_;
     QThreadPool pool_;

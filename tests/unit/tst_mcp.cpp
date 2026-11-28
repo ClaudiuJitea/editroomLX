@@ -195,11 +195,41 @@ private slots:
     void startupLists() {
         // Asked by agents as they start (Codex): answered, empty, without opening Editroom.
         for (const char* m : {"resources/list", "resources/templates/list", "prompts/list"}) {
-            QVERIFY(MCPHandler::isStartup(QLatin1String(m)));
+            QVERIFY(!MCPHandler::opensEditroom(QLatin1String(m)));
             const auto r = MCPHandler::handshake(QJsonObject{{"jsonrpc", "2.0"}, {"id", 1}, {"method", m}});
             QVERIFY(r && r->contains("result"));
         }
-        QVERIFY(!MCPHandler::isStartup(QStringLiteral("tools/call")));
+        // Only using a tool opens Editroom; anything else (an unknown method, a notification) doesn't (#11).
+        QVERIFY(MCPHandler::opensEditroom(QStringLiteral("tools/call")));
+        for (const char* m : {"initialize", "ping", "tools/list", "notifications/initialized", "completion/complete", ""})
+            QVERIFY(!MCPHandler::opensEditroom(QLatin1String(m)));
+    }
+
+    void gradeLevelsAndHDR() {
+        // set_grade's levels and enabled (1.0.12); set_sequence's hdr (1.1); get_project lists them.
+        c->model().load(Project());
+        auto imported = call("import_media", QJsonObject{{"paths", QJsonArray{clip("a_main.mp4")}}});
+        const QString video = result(imported).toObject().value("imported").toArray()[0].toObject().value("id").toString();
+        const QString id = result(call("add_clip", QJsonObject{{"asset_id", video}, {"duration", 2.0}})).toObject().value("added").toArray()[0].toObject().value("id").toString();
+        QVERIFY(!call("set_grade", QJsonObject{{"clip_ids", QJsonArray{id}}, {"shadows_level", 40}, {"highlights_level", -250}}).value("isError").toBool());
+        const auto g = c->model().project().clip(*json::parseUuid(id))->grade;
+        QVERIFY(g);
+        QCOMPARE(g->shadowsLevel, 40.0);
+        QCOMPARE(g->highlightsLevel, -100.0);
+        QVERIFY(!call("set_grade", QJsonObject{{"clip_ids", QJsonArray{id}}, {"enabled", false}}).value("isError").toBool());
+        QVERIFY(c->model().project().clip(*json::parseUuid(id))->grade->off);
+        QVERIFY(!GradeBaker::cube(c->model().project().clip(*json::parseUuid(id))->grade));
+        auto project = result(call("get_project", {})).toObject();
+        QJsonObject gd;
+        for (const auto& v : project.value("clips").toArray()) if (v.toObject().value("id").toString() == id) gd = v.toObject().value("grade").toObject();
+        QCOMPARE(gd.value("shadows_level").toDouble(), 40.0);
+        QCOMPARE(gd.value("enabled").toBool(true), false);
+        QVERIFY(!project.value("sequence").toObject().value("hdr").toBool());
+        auto seq = result(call("set_sequence", QJsonObject{{"hdr", true}})).toObject();
+        QVERIFY(seq.value("hdr").toBool());
+        QVERIFY(c->model().project().isHDR());
+        QVERIFY(!result(call("set_sequence", QJsonObject{{"hdr", false}})).toObject().value("hdr").toBool());
+        QVERIFY(!c->model().project().hdr);
     }
 };
 

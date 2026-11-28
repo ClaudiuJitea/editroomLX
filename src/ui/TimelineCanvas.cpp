@@ -163,6 +163,13 @@ std::optional<QRectF> TimelineCanvas::rect(const Clip& c) const {
     return QRectF(x(c.start), TimelineLayout::ruler + band->first - view().scrollY, std::max(c.duration * pps(), 1.0), band->second);
 }
 
+std::optional<QRectF> TimelineCanvas::rect(const Clip& c, const Project& in) const {
+    const TimelineLayout layout(in, view().rowHeight);
+    auto band = layout.band(c.trackID);
+    if (!band) return std::nullopt;
+    return QRectF(x(c.start), TimelineLayout::ruler + band->first - view().scrollY, std::max(c.duration * pps(), 1.0), band->second);
+}
+
 /// A caption's block on the caption track.
 std::optional<QRectF> TimelineCanvas::captionRect(const CaptionBlock& b) const {
     if (!layout_.captionY) return std::nullopt;
@@ -708,7 +715,9 @@ void TimelineCanvas::updateMove(const Clip& grabbed, double startTime, const std
     bool snapped = false;
     std::vector<double> candidates;
     for (const auto& c : originals) { candidates.push_back(c.start + dt); candidates.push_back(c.end() + dt); }
-    auto targets = project.snapTargets(ids);
+    // Moving, the clips' own edges aren't something to snap to. Duplicating (Alt), the originals stay where they
+    // are, so their edges are: a copy goes straight against the end of the clip it's copied from.
+    auto targets = project.snapTargets(duplicating_ ? IdSet{} : ids);
     targets.push_back(c_.model().playhead());
     if (auto s = snap(candidates, targets); s && minStart + dt + s->first >= -1e-9) {
         dt += s->first;
@@ -1435,7 +1444,9 @@ void TimelineCanvas::drawCaptions(QPainter& ctx, const QRectF& lane, bool dim) {
         ctx.setFont(hintFont());
         ctx.setPen(Theme::hint());
         ctx.drawText(QRectF(12, lane.top(), lane.width() - 24, lane.height()), Qt::AlignVCenter | Qt::AlignLeft,
-                     c_.model().captionsWaiting() ? QStringLiteral("Listening for what's said…") : QStringLiteral("No speech heard in the captioned clips"));
+                     c_.model().captionsWaiting() ? QStringLiteral("Listening for what's said…")
+                     : !c_.transcripts().unsupportedLanguage().isEmpty() ? QStringLiteral("%1 speech can't be transcribed on this computer yet").arg(c_.transcripts().unsupportedLanguage())
+                     : QStringLiteral("No speech heard in the captioned clips"));
         return;
     }
     const QColor fill = Theme::clip(ClipKind::text);
@@ -1667,11 +1678,17 @@ void TimelineCanvas::drawClip(QPainter& ctx, const Clip& c, double alpha) {
         ctx.save();
         ctx.setClipRect(QRectF(r.left(), r.top(), std::max(0.0, r.width() - 16), 18), Qt::IntersectClip);
         shadowText(ctx, QPointF(lx, r.top() + 2.5), label, labelFont());
-        // A graded clip says so, and which Look: "● Warm film", or "● Graded" for adjustments only.
+        // A graded clip says so, and which Look: "● Warm film", or "● Graded" for adjustments only. A grade that's
+        // off is still there, faint and struck through, so it isn't forgotten.
         if (c.grade && !c.grade->isNeutral() && c.kind != ClipKind::audio) {
             const double gx = lx + QFontMetricsF(labelFont()).horizontalAdvance(label) + 9;
+            ctx.save();
+            if (c.grade->off) ctx.setOpacity(0.45);
             drawGradeWheel(ctx, QPointF(gx + 4.5, r.top() + 9.5), 4.5);
-            shadowText(ctx, QPointF(gx + 13, r.top() + 2.5), c.grade->look ? c.grade->lookLabel() : QStringLiteral("Graded"), labelFont());
+            QFont f = labelFont();
+            if (c.grade->off) f.setStrikeOut(true);
+            shadowText(ctx, QPointF(gx + 13, r.top() + 2.5), c.grade->look ? c.grade->lookLabel() : QStringLiteral("Graded"), f);
+            ctx.restore();
         }
         ctx.restore();
     }

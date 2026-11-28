@@ -42,13 +42,9 @@ std::optional<QJsonObject> MCPHandler::handshake(const QJsonObject& req) {
     return std::nullopt;
 }
 
-bool MCPHandler::isStartup(const QString& method) {
-    static const QStringList startup = {QStringLiteral("initialize"), QStringLiteral("ping"), QStringLiteral("tools/list"), QStringLiteral("resources/list"),
-                                        QStringLiteral("resources/templates/list"), QStringLiteral("prompts/list")};
-    return startup.contains(method) || method.startsWith(QLatin1String("notifications/"));
-}
+bool MCPHandler::opensEditroom(const QString& method) { return method == QLatin1String("tools/call"); }
 
-MCPServer::MCPServer(Controller& c, QObject* parent) : QObject(parent), c_(c) {
+MCPServer::MCPServer(Controller& c, QObject* parent) : QObject(parent), c_(&c) {
     connect(&server_, &QTcpServer::newConnection, this, [this] {
         while (QTcpSocket* s = server_.nextPendingConnection()) serve(s);
     });
@@ -93,7 +89,7 @@ QJsonObject MCPServer::handle(const QJsonObject& req, const QString& session, co
     emit toolCalled(name, draftToken);
     QJsonObject result;
     try {
-        result = QJsonObject{{"content", MCPTools::call(name, params.value("arguments").toObject(), c_, who, draft)}, {"isError", false}};
+        result = QJsonObject{{"content", MCPTools::call(name, params.value("arguments").toObject(), *c_, who, draft)}, {"isError", false}};
     } catch (const MCPToolError& e) {
         result = MCPTools::failure(e.message);
     }
@@ -215,15 +211,20 @@ int runMCPBridge(int argc, char** argv) {
         const QJsonObject json = QJsonDocument::fromJson(data).object();
         const QString method = json.value("method").toString();
         const bool hasId = json.contains("id");
-        // Hello, ping, the lists of tools (and of resources and prompts, which it has none of) and notifications:
-        // Editroom's own answer if it's open; this one, and no opening it, if it's closed.
-        if (MCPHandler::isStartup(method)) {
+        // Anything but using a tool: Editroom's own answer if it's open; with it closed, answered here (what it would
+        // say, or that it doesn't do that), and Editroom isn't opened.
+        if (!MCPHandler::opensEditroom(method)) {
             auto [status, body] = post(data, session, from);
             QByteArray reply;
             if (status == 200) reply = body;
             else if (status == 0) {
                 if (method == QLatin1String("initialize")) heldHello = data;
-                if (auto r = MCPHandler::handshake(json)) reply = json::write(*r, false);
+                // A reply to something asked of the agent (no method) or a notification needs no answer.
+                if (!method.isEmpty() && hasId) {
+                    const QJsonObject answer = MCPHandler::handshake(json).value_or(
+                        MCPHandler::error(json.value("id"), -32601, QStringLiteral("Method not found: %1").arg(method)));
+                    reply = json::write(answer, false);
+                }
             } else if (status != 202) reply = body;
             if (!reply.isEmpty() && hasId) writeLine(reply);
             continue;

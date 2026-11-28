@@ -589,6 +589,22 @@
      "tint": {
       "type": "number",
       "description": "-50...50, positive is toward magenta."
+     },
+     "shadows_level": {
+      "type": "number",
+      "description": "Brightness of the darks, -100...100: lift (positive) or crush them, the rest barely moves."
+     },
+     "midtones_level": {
+      "type": "number",
+      "description": "Brightness of the middle tones, -100...100, like gamma."
+     },
+     "highlights_level": {
+      "type": "number",
+      "description": "Brightness of the brights, -100...100: pull them down (negative) or push them up."
+     },
+     "enabled": {
+      "type": "boolean",
+      "description": "false switches the grade off without losing it (not shown or exported); true switches it back on."
      }
     },
     "required": [
@@ -714,7 +730,7 @@
   {
    "name": "set_sequence",
    "title": "Set sequence",
-   "description": "The frame size and frame rate of the cut.",
+   "description": "The frame size, frame rate and dynamic range of the cut.",
    "inputSchema": {
     "type": "object",
     "properties": {
@@ -727,6 +743,10 @@
      "fps": {
       "type": "number",
       "description": "23.976, 24, 25, 29.97, 30, 50, 59.94, 60, 100, 119.88 or 120."
+     },
+     "hdr": {
+      "type": "boolean",
+      "description": "true: HDR (HLG): HDR footage keeps its highlights in the viewer and the export (10-bit HEVC); false: SDR (Rec.709)."
      }
     },
     "required": []

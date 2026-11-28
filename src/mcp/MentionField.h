@@ -43,6 +43,8 @@ private:
     const EditorModel& model_;
     QListWidget* list_;
     std::vector<MentionOption> options_;
+    /// An `@` whose list is closed (Esc, or something picked from it): it stays closed while the cursor is in it.
+    std::optional<int> dismissed_;
 };
 
 } // namespace er

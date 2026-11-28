@@ -3,6 +3,7 @@
 // Needs the speech model: EDITROOM_WHISPER_MODEL=<ggml-base.bin> (skipped without it).
 #include "engine/Transcripts.h"
 #include <QFile>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -14,10 +15,32 @@ class TestTranscripts : public QObject {
 private slots:
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
-        if (!Transcripts::available()) QSKIP("No speech model: set EDITROOM_WHISPER_MODEL");
+    }
+
+    void speechLanguage() {
+        // The Mac's SPEECH LANGUAGE check: one the model can't hear is said (by name), not guessed at; one it can is
+        // used; Automatic is heard from the speech. The setting is put back as it was.
+        QSettings settings;
+        const QVariant before = settings.value(QLatin1String(Transcripts::languageKey));
+        settings.setValue(QLatin1String(Transcripts::languageKey), QStringLiteral("kl_GL"));
+        const auto kl = Transcripts::resolve();
+        settings.setValue(QLatin1String(Transcripts::languageKey), QStringLiteral("es_ES"));
+        const auto es = Transcripts::resolve();
+        settings.setValue(QLatin1String(Transcripts::languageKey), QString());
+        const auto automatic = Transcripts::resolve();
+        if (before.isValid()) settings.setValue(QLatin1String(Transcripts::languageKey), before);
+        else settings.remove(QLatin1String(Transcripts::languageKey));
+        QVERIFY2(!kl.code && !kl.name.isEmpty() && kl.name != QLatin1String("kl_GL"), qPrintable(kl.name));
+        QCOMPARE(es.code.value_or(QString()), QStringLiteral("es"));
+        QCOMPARE(automatic.code.value_or(QString()), QStringLiteral("auto"));
+        // Settings lists the model's languages by name, Spanish among them.
+        const auto all = Transcripts::supportedLanguages();
+        QVERIFY(all.size() > 50);
+        QVERIFY(std::any_of(all.begin(), all.end(), [](const auto& l) { return l.first == QLatin1String("es") && l.second == QLatin1String("Spanish"); }));
     }
 
     void hears() {
+        if (!Transcripts::available()) QSKIP("No speech model: set EDITROOM_WHISPER_MODEL");
         auto t = Transcripts::transcribe(sample);
         QVERIFY(t);
         QVERIFY2(t->says(QStringLiteral("ask not what your country can do for you")), qPrintable(t->text()));
@@ -34,6 +57,7 @@ private slots:
     }
 
     void queueAndCache() {
+        if (!Transcripts::available()) QSKIP("No speech model: set EDITROOM_WHISPER_MODEL");
         Transcripts store;
         std::optional<Transcript> got;
         bool called = false;

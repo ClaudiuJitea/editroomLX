@@ -35,9 +35,20 @@ struct ColorGrade {
     double tint = 0.0;
     /// Wheel positions inside the unit circle: x right, y down. Red sits at 0°, green at 120°, blue at 240°.
     WheelPoint shadows, midtones, highlights;
+    /// Brightness of each range, -100...100: the darks lifted or crushed, the middle raised or lowered, the
+    /// brights pulled down or pushed up, each without moving the others much.
+    double shadowsLevel = 0.0;
+    double midtonesLevel = 0.0;
+    double highlightsLevel = 0.0;
+    /// Switched off (Grade's eye): kept, but the clip is shown and exported without it.
+    bool off = false;
     Extra extra;
 
-    /// No look and every adjustment at zero. The look's strength doesn't count without a look.
+    /// A level as the even (grey) offset it adds across its range: ±100 is ±0.2, as far as a wheel's colour goes.
+    static double levelOffset(double level) { return std::min(100.0, std::max(-100.0, level)) / 100 * 0.2; }
+
+    /// No look and every adjustment at zero. The look's strength doesn't count without a look (it isn't
+    /// shown then, and a look taken away can leave it behind). Being switched off doesn't count either.
     bool isNeutral() const;
     QString lookLabel() const;
     /// Equality of the model fields (what Swift's Hashable compares); `extra` is ignored.

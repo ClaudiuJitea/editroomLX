@@ -114,17 +114,21 @@
             "x" : 0,
             "y" : 0
           },
+          "highlightsLevel" : -10,
           "look" : "Film print",
           "lookIntensity" : 0.8,
           "midtones" : {
             "x" : 0.1,
             "y" : -0.2
           },
+          "midtonesLevel" : 0,
+          "off" : true,
           "saturation" : -10,
           "shadows" : {
             "x" : 0,
             "y" : 0
           },
+          "shadowsLevel" : 25,
           "temperature" : 5,
           "tint" : 0
         },
@@ -232,6 +236,7 @@
       }
     ],
     "fps" : 30,
+    "hdr" : true,
     "height" : 1080,
     "hiddenMedia" : [
       "\/Users\/me\/Movies\/Trip\/junk.mov"

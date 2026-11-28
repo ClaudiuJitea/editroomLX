@@ -11,6 +11,7 @@
 #include "rendering/GpuRenderer.h"
 #include <QImage>
 #include <QObject>
+#include <array>
 #include <atomic>
 #include <functional>
 #include <condition_variable>
@@ -50,12 +51,17 @@ public:
     void* presentInstance() const { return gpu_ ? gpu_->vkInstance() : nullptr; }
     /// The window surface (VkSurfaceKHR) and its size in device pixels; none to let it go (before it's destroyed).
     bool setPresentSurface(void* surface, int w, int h);
+    /// The part of the frame the window shows (0…1): all of it, or what a zoomed viewer has in view.
+    void setPresentRegion(double x0, double y0, double x1, double y1);
     /// Frames go to the surface (true) or come back as images (false).
     void setPresenting(bool on);
     bool presenting() const { return presenting_; }
     /// The frame showing now, composed again (after the viewer switched between presenting and painting).
     void redraw();
     GpuRenderer* gpu() { return gpu_.get(); }
+    /// Its tab went behind another: playback stops, and the plan, its frames and the sound are let go. The next
+    /// rebuild makes them again.
+    void unload();
     /// Frames composed and frames the clock had already passed (dropped), since play().
     long long framesShown() const { return framesShown_; }
     long long framesDropped() const { return framesDropped_; }
@@ -71,7 +77,8 @@ private:
     MediaStore& media_;
     SoundStore& sound_;
     AudioStream audio_;
-    std::unique_ptr<GpuRenderer> gpu_;
+    /// One GPU for every tab's player (only the tab in front renders); its window surface is the viewer in front's.
+    std::shared_ptr<GpuRenderer> gpu_;
     mutable std::mutex lock_;
     std::condition_variable wake_;
     std::shared_ptr<const RenderPlan> plan_;
@@ -88,6 +95,7 @@ private:
     double fps_ = 30;
     int previewW_ = 0, previewH_ = 0;
     std::optional<Range> loop_;
+    std::array<double, 4> region_{0, 0, 1, 1};
     bool stop_ = false;
     std::atomic<long long> framesShown_{0}, framesDropped_{0};
     std::thread thread_;

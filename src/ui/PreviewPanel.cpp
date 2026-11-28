@@ -104,6 +104,13 @@ private:
 };
 } // namespace
 
+Viewer::~Viewer() {
+    delete presentBox_;
+    presentBox_ = nullptr;
+    present_ = nullptr;
+    vulkan_.reset();
+}
+
 bool Viewer::presenting() const { return present_ && presentBox_ && presentBox_->isVisible() && c_.engine().presenting(); }
 
 void Viewer::updatePresenting() {
@@ -111,10 +118,15 @@ void Viewer::updatePresenting() {
     static const bool allowed = qEnvironmentVariable("EDITROOM_PRESENT") != QLatin1String("0")
         && (QGuiApplication::platformName() == QLatin1String("xcb") || QGuiApplication::platformName() == QLatin1String("wayland"));
     auto* panel = qobject_cast<PreviewPanel*>(parentWidget() ? parentWidget()->parentWidget() ? parentWidget()->parentWidget()->parentWidget() : nullptr : nullptr);
-    const bool zoomed = panel && panel->zoom();
     // (Not while Magic's thinking scene is over the window: it dims and draws on the picture.)
     const bool overlay = window() && window()->property("magicOverlay").toBool();
-    const bool wanted = allowed && isVisible() && !zoomed && !overlay && !c_.model().project().clips.empty() && !c_.sourcePreview().current();
+    // Zoomed in, only the part of the picture in view is presented, in a window over just that part (a native window
+    // isn't clipped by the scroll area around it).
+    const QRectF pic = picture();
+    QRectF shown = pic;
+    if (panel && panel->zoom()) shown = pic.intersected(QRectF(visibleRegion().boundingRect()));
+    const bool wanted = allowed && isVisible() && !overlay && !shown.isEmpty() && shown.width() >= 8 && shown.height() >= 8
+                     && !c_.model().project().clips.empty() && !c_.sourcePreview().current();
     if (wanted && !present_ && c_.engine().presentInstance()) {
         vulkan_ = std::make_unique<QVulkanInstance>();
         vulkan_->setVkInstance(reinterpret_cast<VkInstance>(c_.engine().presentInstance()));
@@ -126,15 +138,18 @@ void Viewer::updatePresenting() {
             presentBox_->setAttribute(Qt::WA_DontCreateNativeAncestors);
             presentBox_->setAttribute(Qt::WA_TransparentForMouseEvents);
             presentBox_->setFocusPolicy(Qt::NoFocus);
-            presentBox_->setGeometry(picture().toAlignedRect());
+            presentBox_->setGeometry(shown.toAlignedRect());
         } else {
             vulkan_.reset();
         }
     }
     if (!present_) return;
-    const QRect place = picture().toAlignedRect();
+    const QRect place = shown.toAlignedRect();
     const bool ready = static_cast<PresentWindow*>(present_)->ready();
     presentBox_->setGeometry(place);
+    if (pic.width() > 0 && pic.height() > 0)
+        c_.engine().setPresentRegion((place.left() - pic.left()) / pic.width(), (place.top() - pic.top()) / pic.height(),
+                                     (place.right() + 1 - pic.left()) / pic.width(), (place.bottom() + 1 - pic.top()) / pic.height());
     presentBox_->setVisible(wanted);
     c_.engine().setPresenting(wanted && ready);
 }
@@ -234,10 +249,9 @@ void Viewer::paintEvent(QPaintEvent*) {
     const Project& proj = m.project();
     p.fillRect(rect(), m.viewerOnly() ? QColor(Qt::black) : Theme::bg());
     const QRectF r = picture();
-    QPainterPath clip;
-    clip.addRoundedRect(r, 3, 3);
+    // Square, as the export is.
     p.save();
-    p.setClipPath(clip);
+    p.setClipRect(r);
     p.fillRect(r, Qt::black);
     // Only a frame of the viewer's own shape: one made for the sequence's old shape (it went from vertical to wide,
     // say) would be stretched to fill, so the viewer is black for that moment instead.
@@ -273,9 +287,12 @@ void Viewer::paintEvent(QPaintEvent*) {
         p.drawText(QRectF(label.left() + 8 + nw, label.top(), tw, label.height()), Qt::AlignVCenter | Qt::AlignLeft, time);
     }
     p.restore();
-    p.setPen(QPen(Theme::ink(0.06), 1));
+    // Its faint edge just outside the picture, not over it.
+    p.setRenderHint(QPainter::Antialiasing, false);
+    p.setPen(QPen(Theme::ink(0.05), 1));
     p.setBrush(Qt::NoBrush);
-    p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3);
+    p.drawRect(r.adjusted(-1, -1, 0, 0));
+    p.setRenderHint(QPainter::Antialiasing);
     // Nothing on the timeline yet: say how to start, and take a click as "import".
     if (proj.clips.empty() && !s) drawEmptyPrompt(p, r);
 }

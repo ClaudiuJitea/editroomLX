@@ -17,9 +17,9 @@ C++20, Qt 6 and Vulkan. GPU where it helps, everything on your computer.</p>
 
 | | |
 |:--|:--|
-| **Timeline.** Trim, split, move with linked sound, Alt-copy, snapping, markers, in/out, fades, gain lines, dissolves, speed ramps and zooms. Skim clips in Media by hovering. Every change is one undo step. | **Titles and captions.** Any font, size and colour, with fades. Captions come from what's said in your clips, heard on this computer. |
-| **Colour.** Looks (Teal and orange, Film print, Mono…), exposure, contrast, saturation and three grade wheels. HDR (HLG, PQ) and Apple Log brought to Rec.709. | **Sound.** Waveforms, per-track meters and solo, ducking under dialogue, loudness targets (-14 / -16 / -23 LUFS), time-stretched speed changes. |
-| **Fast.** One Vulkan compositor kernel (with an identical OpenMP CPU path): a 4K frame with three layers, a grade and a title in ~16 ms on Iris Xe. Hardware decode (VA-API, Vulkan Video, NVDEC) with zero-copy DMA-BUFs: 4K 10-bit HEVC at ~265 fps. | **Export.** H.264 or HEVC through hardware encoders (VA-API, NVENC, Vulkan), FSR 1 EASU upscaling, libx264/libopenh264 fallback, WAV, vertical and square crops, and a background queue. |
+| **Timeline.** Trim, split, move with linked sound, Alt-copy, snapping, markers, in/out, fades, gain lines, dissolves, speed ramps and zooms. Skim clips in Media by hovering. Every change is one undo step. Several projects open as tabs, with copy and paste between them. | **Titles and captions.** Any font, size and colour, with fades. Captions come from what's said in your clips, heard on this computer. |
+| **Colour.** Looks (Teal and orange, Film print, Mono…), exposure, contrast, saturation, three grade wheels with a brightness for each range, and a switch to compare without the grade. HDR (HLG, PQ) and Apple Log brought to Rec.709, or HDR projects kept in HLG. | **Sound.** Waveforms, per-track meters and solo, ducking under dialogue, loudness targets (-14 / -16 / -23 LUFS), time-stretched speed changes. |
+| **Fast.** One Vulkan compositor kernel (with an identical OpenMP CPU path): a 4K frame with three layers, a grade and a title in ~16 ms on Iris Xe. Hardware decode (VA-API, Vulkan Video, NVDEC) with zero-copy DMA-BUFs: 4K 10-bit HEVC at ~265 fps. | **Export.** H.264 or HEVC through hardware encoders (VA-API, NVENC, Vulkan), 10-bit HEVC in HLG for HDR projects, FSR 1 EASU upscaling, libx264/libopenh264 fallback, WAV, vertical and square crops, and a background queue. |
 
 <table>
   <tr>

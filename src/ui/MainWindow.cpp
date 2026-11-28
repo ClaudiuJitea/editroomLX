@@ -14,6 +14,7 @@
 #include "TimelineCanvas.h"
 #include "TimelinePanel.h"
 #include "Widgets.h"
+#include "TabStrip.h"
 #include <QApplication>
 #include <QCloseEvent>
 #include <QFileInfo>
@@ -31,30 +32,31 @@
 
 namespace er {
 
-MainWindow::MainWindow(Controller& c, QWidget* parent)
-    : QMainWindow(parent), c_(c),
+MainWindow::MainWindow(Workspace& w, QWidget* parent)
+    : QMainWindow(parent), w_(w),
       keys_([] { return QSettings().value(QLatin1String(ShortcutStore::key)).toByteArray(); },
             [](const std::optional<QByteArray>& d) { QSettings s; if (d) s.setValue(QLatin1String(ShortcutStore::key), *d); else s.remove(QLatin1String(ShortcutStore::key)); }) {
     setWindowTitle(QStringLiteral("EditroomLX"));
     setMinimumSize(1080, 680);
     resize(1480, 940);
     setAcceptDrops(true);
-    c_.setWindow(this);
+    // Every tab's editor asks its questions (alerts, file dialogs) over this window.
+    w_.setUp = [this](Controller& c) { c.setWindow(this); };
     auto* central = new QWidget;
     auto* v = new QVBoxLayout(central);
     v->setContentsMargins(0, 0, 0, 0);
     v->setSpacing(0);
-    // Title strip.
+    // Title strip: the tabs, then the export pill, Magic and Export.
     auto* strip = new QWidget;
     strip_ = strip;
     strip->setFixedHeight(38);
     auto* sh = new QHBoxLayout(strip);
-    sh->setContentsMargins(12, 0, 10, 0);
-    sh->addStretch();
-    title_ = new QLabel;
-    title_->setFont(Theme::font(13, 600));
-    sh->addWidget(title_);
-    sh->addStretch();
+    sh->setContentsMargins(10, 0, 10, 0);
+    sh->setSpacing(0);
+    auto* tabs = new TabStrip(w_, keys_);
+    tabs_ = tabs;
+    sh->addWidget(tabs, 1);
+    sh->addSpacing(14);
     exportPill_ = new QLabel;
     exportPill_->setFont(Theme::font(11, 600));
     exportPill_->hide();
@@ -64,6 +66,7 @@ MainWindow::MainWindow(Controller& c, QWidget* parent)
     magic->setToolTip(QStringLiteral("Magic"));
     connect(magic, &QPushButton::clicked, this, &MainWindow::magicRequested);
     sh->addWidget(magic);
+    sh->addSpacing(8);
     magicButton_ = magic;
     // Off in Settings › Magic: the Magic button goes.
     magic->setVisible(QSettings().value(QStringLiteral("magicEnabled"), true).toBool());
@@ -73,11 +76,42 @@ MainWindow::MainWindow(Controller& c, QWidget* parent)
     sh->addWidget(exp);
     v->addWidget(strip);
     v->addWidget(new Hairline(Qt::Horizontal));
+    setCentralWidget(central);
+    connect(&w_, &Workspace::aboutToSwitch, this, &MainWindow::tearDownEditor);
+    connect(&w_, &Workspace::activeChanged, this, [this] { buildEditor(); emit controllerChanged(*c_); });
+    connect(&w_, &Workspace::tabsChanged, this, [this] { refreshTitle(); rebuildMenus(); });
+    qApp->installEventFilter(this);
+    buildEditor();
+}
+
+void MainWindow::tearDownEditor() {
+    if (!editor_) return;
+    // The views go before their editor goes behind: the viewer lets go of its window surface first.
+    if (c_ && c_->model().viewerOnly()) c_->model().toggleViewerFullScreen();
+    editor_->hide();
+    delete editor_;
+    editor_ = nullptr;
+    library_ = nullptr;
+    preview_ = nullptr;
+    inspector_ = nullptr;
+    timeline_ = nullptr;
+    top_ = nullptr;
+    vertical_ = nullptr;
+    exportPill_->hide();
+}
+
+void MainWindow::buildEditor() {
+    tearDownEditor();
+    c_ = &w_.active();
+    editor_ = new QWidget;
+    auto* ev = new QVBoxLayout(editor_);
+    ev->setContentsMargins(0, 0, 0, 0);
+    ev->setSpacing(0);
     // Panels.
-    library_ = new LibraryPanel(c_);
-    preview_ = new PreviewPanel(c_);
-    inspector_ = new InspectorPanel(c_);
-    timeline_ = new TimelinePanel(c_);
+    library_ = new LibraryPanel(*c_);
+    preview_ = new PreviewPanel(*c_);
+    inspector_ = new InspectorPanel(*c_);
+    timeline_ = new TimelinePanel(*c_);
     library_->setMinimumWidth(190);
     library_->setMaximumWidth(440);
     inspector_->setFixedWidth(InspectorPanel::width);
@@ -94,33 +128,38 @@ MainWindow::MainWindow(Controller& c, QWidget* parent)
     vertical_->setHandleWidth(1);
     vertical_->setChildrenCollapsible(false);
     timeline_->setMinimumHeight(170);
-    v->addWidget(vertical_, 1);
-    setCentralWidget(central);
+    ev->addWidget(vertical_, 1);
+    static_cast<QVBoxLayout*>(centralWidget()->layout())->addWidget(editor_, 1);
     // The window starts on the timeline, so the Media search never takes focus as Editroom opens.
     timeline_->canvas()->setFocus(Qt::OtherFocusReason);
+    // The panels' sizes, the same in every tab.
     QSettings s;
     const int libW = s.value(QStringLiteral("libraryWidth"), 252).toInt();
     const int tlH = s.value(QStringLiteral("timelineHeight"), 360).toInt();
-    top_->setSizes({libW, 1480 - libW - InspectorPanel::width, InspectorPanel::width});
-    vertical_->setSizes({940 - 38 - tlH, tlH});
+    const int W = std::max(width(), 1080), H = std::max(height(), 680);
+    top_->setSizes({libW, W - libW - InspectorPanel::width, InspectorPanel::width});
+    vertical_->setSizes({H - 38 - tlH, tlH});
     connect(top_, &QSplitter::splitterMoved, this, [this] { QSettings().setValue(QStringLiteral("libraryWidth"), top_->sizes().value(0)); });
     connect(vertical_, &QSplitter::splitterMoved, this, [this] { QSettings().setValue(QStringLiteral("timelineHeight"), vertical_->sizes().value(1)); });
-    connect(&c_.model(), &EditorModel::changed, this, &MainWindow::refreshTitle);
-    connect(&c_.model(), &EditorModel::viewerOnlyChanged, this, &MainWindow::setViewerOnly);
-    connect(&c_.model(), &EditorModel::selectionChanged, this, &MainWindow::rebuildMenus);
-    connect(&c_.model(), &EditorModel::changed, this, &MainWindow::rebuildMenus);
-    connect(&c_.exports(), &ExportQueue::changed, this, [this] {
-        const auto* cur = c_.exports().current();
+    // Connections to this tab's editor go with its views.
+    QWidget* ctx = editor_;
+    connect(&c_->model(), &EditorModel::changed, ctx, [this] { refreshTitle(); });
+    connect(&c_->model(), &EditorModel::viewerOnlyChanged, ctx, [this](bool on) { setViewerOnly(on); });
+    connect(&c_->model(), &EditorModel::selectionChanged, ctx, [this] { rebuildMenus(); });
+    connect(&c_->model(), &EditorModel::changed, ctx, [this] { rebuildMenus(); });
+    auto pill = [this] {
+        const auto* cur = c_->exports().current();
         if (!cur) { exportPill_->hide(); return; }
-        QString t = QStringLiteral("Exporting %1%").arg(int(c_.exports().progress() * 100));
-        if (c_.exports().waiting()) t += QStringLiteral("  +%1").arg(c_.exports().waiting());
+        QString t = QStringLiteral("Exporting %1%").arg(int(c_->exports().progress() * 100));
+        if (c_->exports().waiting()) t += QStringLiteral("  +%1").arg(c_->exports().waiting());
         exportPill_->setText(t);
         exportPill_->show();
-    });
-    connect(&c_.exports(), &ExportQueue::finished, this, [this](const QString& path, bool ok, const QString& msg) {
+    };
+    connect(&c_->exports(), &ExportQueue::changed, ctx, pill);
+    connect(&c_->exports(), &ExportQueue::finished, ctx, [this](const QString& path, bool ok, const QString& msg) {
         if (!ok && !msg.isEmpty()) Alert::run(this, QStringLiteral("Couldn't export “%1”").arg(QFileInfo(path).fileName()), msg, {QStringLiteral("OK")});
     });
-    qApp->installEventFilter(this);
+    pill();
     refreshTitle();
     rebuildMenus();
 }
@@ -131,12 +170,14 @@ void MainWindow::applyTheme() {
 }
 
 void MainWindow::refreshTitle() {
-    title_->setText(c_.model().title() + (c_.model().isDirty() && !EditorModel::autosaves() ? QStringLiteral("  •") : QString()));
-    setWindowTitle(c_.model().title() + QStringLiteral(" — EditroomLX"));
+    if (!c_) return;
+    tabs_->update();
+    setWindowTitle(c_->model().title() + QStringLiteral(" — EditroomLX"));
 }
 
 void MainWindow::rebuildMenus() {
-    EditorModel& m = c_.model();
+    if (!c_) return;
+    EditorModel& m = c_->model();
     menuBar()->clear();
     auto item = [this](QMenu* menu, const QString& title, std::function<void()> act, std::optional<ShortcutAction> a = {}, bool enabled = true) {
         QAction* x = menu->addAction(title);
@@ -146,6 +187,12 @@ void MainWindow::rebuildMenus() {
             // stay with the editor window (KeyCommands), so a dialog's Backspace never deletes clips.
             if (auto k = keys_.menu(*a)) {
                 x->setShortcut(QKeySequence(k->display()));
+                // Ctrl+Shift+[ arrives as Ctrl+Shift+{ (and ] as }) on most layouts: both work.
+                if (k->shift && (k->key == QLatin1String("[") || k->key == QLatin1String("]"))) {
+                    KeyCombo braced = *k;
+                    braced.key = k->key == QLatin1String("[") ? QStringLiteral("{") : QStringLiteral("}");
+                    x->setShortcuts({QKeySequence(k->display()), QKeySequence(braced.display())});
+                }
                 x->setShortcutContext(Qt::WindowShortcut);
                 if (k->typesText()) x->setShortcutVisibleInContextMenu(true);
                 if (k->typesText()) x->setShortcut(QKeySequence()), x->setText(title + u'\t' + k->display());
@@ -157,6 +204,7 @@ void MainWindow::rebuildMenus() {
     // File
     QMenu* file = menuBar()->addMenu(QStringLiteral("File"));
     item(file, QStringLiteral("New"), [&m] { m.newProject(); }, ShortcutAction::new_);
+    item(file, QStringLiteral("New Tab"), [this] { w_.newTab(); }, ShortcutAction::newTab);
     item(file, QStringLiteral("Open…"), [&m] { m.openProject(); }, ShortcutAction::open);
     QMenu* recent = file->addMenu(QStringLiteral("Open Recent"));
     const QStringList recents = m.recentProjects();
@@ -164,10 +212,11 @@ void MainWindow::rebuildMenus() {
     if (!recents.isEmpty()) recent->addSeparator();
     recent->addAction(QStringLiteral("Clear Menu"), this, [&m] { m.clearRecents(); })->setEnabled(!recents.isEmpty());
     file->addSeparator();
+    item(file, QStringLiteral("Close Tab"), [this] { w_.closeActive(); }, ShortcutAction::closeTab, w_.canClose());
     item(file, QStringLiteral("Save"), [&m] { m.save(); }, ShortcutAction::save);
     item(file, QStringLiteral("Save As…"), [&m] { m.saveAs(); }, ShortcutAction::saveAs);
     file->addSeparator();
-    item(file, QStringLiteral("Import Media…"), [this] { c_.showImportPanel(); }, ShortcutAction::importMedia);
+    item(file, QStringLiteral("Import Media…"), [this] { c_->showImportPanel(); }, ShortcutAction::importMedia);
     item(file, QStringLiteral("Export…"), [this] { showExport(); }, ShortcutAction::export_);
     file->addSeparator();
     QAction* quit = file->addAction(QStringLiteral("Quit EditroomLX"), this, &QWidget::close);
@@ -195,7 +244,7 @@ void MainWindow::rebuildMenus() {
                 QMetaObject::invokeMethod(f, "selectAll");
                 return;
             }
-            c_.model().selectAll();
+            c_->model().selectAll();
             timeline_->canvas()->setFocus(Qt::ShortcutFocusReason);
         });
         a->setShortcut(QKeySequence::SelectAll);
@@ -243,9 +292,9 @@ void MainWindow::rebuildMenus() {
     item(mark, QStringLiteral("Clear In and Out"), [&m] { m.clearRange(); }, ShortcutAction::clearInOut, m.project().inPoint || m.project().outPoint);
     // View
     QMenu* view = menuBar()->addMenu(QStringLiteral("View"));
-    item(view, QStringLiteral("Zoom In"), [this] { c_.model().zoom(1.4); }, ShortcutAction::zoomIn);
-    item(view, QStringLiteral("Zoom Out"), [this] { c_.model().zoom(1 / 1.4); }, ShortcutAction::zoomOut);
-    item(view, QStringLiteral("Zoom to Fit"), [this] { c_.model().zoomToFit(); }, ShortcutAction::zoomToFit);
+    item(view, QStringLiteral("Zoom In"), [this] { c_->model().zoom(1.4); }, ShortcutAction::zoomIn);
+    item(view, QStringLiteral("Zoom Out"), [this] { c_->model().zoom(1 / 1.4); }, ShortcutAction::zoomOut);
+    item(view, QStringLiteral("Zoom to Fit"), [this] { c_->model().zoomToFit(); }, ShortcutAction::zoomToFit);
     view->addSeparator();
     auto toggle = [&](const QString& t, bool on, std::function<void()> act, std::optional<ShortcutAction> a) {
         QAction* x = item(view, t, [this, act] { act(); timeline_->refreshToggles(); rebuildMenus(); }, a);
@@ -261,6 +310,10 @@ void MainWindow::rebuildMenus() {
     QAction* fs = view->addAction(isFullScreen() ? QStringLiteral("Exit Full Screen") : QStringLiteral("Enter Full Screen"), this,
                                   [this] { isFullScreen() ? showNormal() : showFullScreen(); rebuildMenus(); });
     fs->setShortcut(QKeySequence(QStringLiteral("F11")));
+    // Window: the Mac puts tab switching in its Window menu.
+    QMenu* window = menuBar()->addMenu(QStringLiteral("Window"));
+    item(window, QStringLiteral("Show Previous Tab"), [this] { w_.selectPrevious(); }, ShortcutAction::previousTab, w_.count() > 1);
+    item(window, QStringLiteral("Show Next Tab"), [this] { w_.selectNext(); }, ShortcutAction::nextTab, w_.count() > 1);
     // Help (the Mac's app menu items: About Editroom, Check for Updates…)
     QMenu* help = menuBar()->addMenu(QStringLiteral("Help"));
     help->addAction(QStringLiteral("About EditroomLX"), this, &MainWindow::showAbout);
@@ -270,16 +323,16 @@ void MainWindow::rebuildMenus() {
 }
 
 void MainWindow::showExport() {
-    if (c_.model().project().clips.empty()) {
+    if (c_->model().project().clips.empty()) {
         Alert::run(this, QStringLiteral("The timeline is empty."), QString(), {QStringLiteral("OK")});
         return;
     }
-    ExportDialog d(c_, this);
+    ExportDialog d(*c_, this);
     d.exec();
 }
 
 void MainWindow::showSettings() {
-    SettingsDialog d(c_, keys_, this);
+    SettingsDialog d(*c_, keys_, this);
     connect(&d, &SettingsDialog::themeChanged, this, &MainWindow::applyTheme);
     connect(&d, &SettingsDialog::shortcutsChanged, this, &MainWindow::rebuildMenus);
     connect(&d, &SettingsDialog::magicEnabledChanged, this, [this](bool on) { magicButton_->setVisible(on); });
@@ -327,7 +380,7 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::perform(ShortcutAction a) {
-    EditorModel& m = c_.model();
+    EditorModel& m = c_->model();
     using A = ShortcutAction;
     switch (a) {
     case A::playPause: m.togglePlay(); break;
@@ -350,15 +403,19 @@ void MainWindow::perform(ShortcutAction a) {
     case A::setIn: m.setInPoint(); break;
     case A::setOut: m.setOutPoint(); break;
     case A::clearInOut: m.clearRange(); break;
-    case A::zoomIn: c_.model().zoom(1.4); break;
-    case A::zoomOut: c_.model().zoom(1 / 1.4); break;
-    case A::zoomToFit: c_.model().zoomToFit(); break;
+    case A::zoomIn: c_->model().zoom(1.4); break;
+    case A::zoomOut: c_->model().zoom(1 / 1.4); break;
+    case A::zoomToFit: c_->model().zoomToFit(); break;
     case A::snapping: m.snapping = !m.snapping; timeline_->refreshToggles(); break;
     case A::sticky: m.setSticky(!m.sticky()); timeline_->refreshToggles(); break;
     case A::skimming: m.setSkimming(!m.skimming()); timeline_->refreshToggles(); break;
     case A::audioScrubbing: m.setAudioScrub(!m.audioScrub()); timeline_->refreshToggles(); break;
     case A::freezeFrame: m.freezeFrame(); break;
     case A::reverse: m.reverseSelection(); break;
+    case A::newTab: w_.newTab(); return;
+    case A::closeTab: w_.closeActive(); return;
+    case A::previousTab: w_.selectPrevious(); return;
+    case A::nextTab: w_.selectNext(); return;
     default: break;
     }
     rebuildMenus();
@@ -402,35 +459,37 @@ void MainWindow::setViewerOnly(bool on) {
 
 void MainWindow::keyPressEvent(QKeyEvent* e) {
     // Esc leaves the full-screen viewer.
-    if (e->key() == Qt::Key_Escape && c_.model().viewerOnly()) { c_.model().toggleViewerFullScreen(); return; }
+    if (e->key() == Qt::Key_Escape && c_->model().viewerOnly()) { c_->model().toggleViewerFullScreen(); return; }
     if (!runShortcut(e, false)) QMainWindow::keyPressEvent(e);
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
-    if (!c_.model().confirmDiscard(true)) { e->ignore(); return; }
-    c_.model().autosaveNow();
+    // With Auto-save off, each tab's unsaved changes ask Save, Don't Save or Cancel, in front.
+    if (!w_.confirmQuit()) { e->ignore(); return; }
+    w_.autosaveAll();
     e->accept();
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
     if (!e->mimeData()->hasUrls()) return;
     // It lights up the Media panel, where they go, rather than the whole window.
-    c_.setImportDropHover(true);
+    c_->setImportDropHover(true);
     e->acceptProposedAction();
 }
 
-void MainWindow::dragLeaveEvent(QDragLeaveEvent*) { c_.setImportDropHover(false); }
+void MainWindow::dragLeaveEvent(QDragLeaveEvent*) { c_->setImportDropHover(false); }
 
 void MainWindow::dropEvent(QDropEvent* e) {
-    c_.setImportDropHover(false);
+    c_->setImportDropHover(false);
     QStringList media;
     for (const QUrl& u : e->mimeData()->urls()) {
         if (!u.isLocalFile()) continue;
         const QString p = u.toLocalFile();
-        if (EditorModel::isProjectFile(p)) { if (c_.model().confirmDiscard()) c_.model().open(p); }
+        // A project opens in a tab of its own; anything else is imported here.
+        if (EditorModel::isProjectFile(p)) w_.open(p);
         else media << p;
     }
-    c_.importFiles(media);
+    c_->importFiles(media);
 }
 
 } // namespace er

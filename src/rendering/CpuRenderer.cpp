@@ -87,4 +87,38 @@ std::vector<uint8_t> CpuRenderer::renderNV12(const FrameJob& job) {
     return out;
 }
 
+std::vector<uint16_t> CpuRenderer::packP010(const std::vector<float>& f, int w, int h) {
+    const int cw = (w + 1) / 2, ch = (h + 1) / 2;
+    std::vector<uint16_t> out(size_t(w) * h + size_t(cw) * ch * 2);
+    if (f.size() < size_t(w) * h * 4) return {};
+    auto code = [](float v) { return uint16_t(cm::clamp(int(cm::floor(v + 0.5f)), 0, 1023) << 6); };
+#pragma omp parallel for
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const float* p = &f[(size_t(y) * w + x) * 4];
+            out[size_t(y) * w + x] = code(cm::er_rgb_to_yuv2020(cm::vec3(p[0], p[1], p[2]), 1023.0f).x);
+        }
+#pragma omp parallel for
+    for (int y = 0; y < ch; ++y)
+        for (int x = 0; x < cw; ++x) {
+            // The 2×2 block's average colour.
+            cm::vec3 sum(0.0f);
+            float n = 0;
+            for (int j = 0; j < 2; ++j)
+                for (int i = 0; i < 2; ++i) {
+                    const int px = std::min(w - 1, x * 2 + i), py = std::min(h - 1, y * 2 + j);
+                    const float* p = &f[(size_t(py) * w + px) * 4];
+                    sum = sum + cm::vec3(cm::er_clamp01(p[0]), cm::er_clamp01(p[1]), cm::er_clamp01(p[2]));
+                    n += 1;
+                }
+            const cm::vec3 yuv = cm::er_rgb_to_yuv2020(sum / n, 1023.0f);
+            uint16_t* c = &out[size_t(w) * h + (size_t(y) * cw + x) * 2];
+            c[0] = code(yuv.y);
+            c[1] = code(yuv.z);
+        }
+    return out;
+}
+
+std::vector<uint16_t> CpuRenderer::renderP010(const FrameJob& job) { return packP010(renderFloat(job), job.frame.outW, job.frame.outH); }
+
 } // namespace er

@@ -154,6 +154,7 @@ std::optional<RenderPlan> CompositionBuilder::build(const Project& project, cons
     key += QByteArray::number(o.renderW) + 'x' + QByteArray::number(o.renderH);
     if (o.reframe) key += QByteArray::number(o.reframe->first, 'g', 17) + ',' + QByteArray::number(o.reframe->second, 'g', 17);
     if (o.upscale) key += "+up";
+    if (project.isHDR()) key += o.hdrOutput ? "+hlg" : "+hdrview";
     // The file each item has open: reloaded from disk (a rotated copy saved over it), it's a new one, so the player
     // builds afresh instead of keeping what it made from the old file.
     {
@@ -161,7 +162,9 @@ std::optional<RenderPlan> CompositionBuilder::build(const Project& project, cons
         for (const auto& c : project.clips)
             if (c.assetID && seen.insert(*c.assetID).second) key += '#' + QByteArray::number(quintptr(media.runtime(*c.assetID)));
     }
-    plan.upscale = o.upscale;
+    // HDR: put together in HDR. The upscaler works in Rec.709; an HDR export is resized as before.
+    plan.hdr = !project.isHDR() ? ER_HDR_OFF : o.hdrOutput ? ER_HDR_HLG : ER_HDR_VIEW;
+    plan.upscale = o.upscale && plan.hdr == ER_HDR_OFF;
     plan.signature = fnv(key);
     return plan;
 }
@@ -225,19 +228,28 @@ FrameJob describeFrame(const RenderPlan& plan, double t, const FrameProvider& fr
             L.source = addSource(pic);
             fit(L, pic.displayWidth(), pic.displayHeight());
             L.upscale = plan.upscale && L.fitScale > 1.01f ? 1 : 0;
-            // After scaling, so a 4K source is converted at the output's size.
-            L.colorCube = addCube(SourceColors::cube(layer.color));
+            // After scaling, so a 4K source is converted at the output's size. An HDR project keeps HDR clips as they
+            // are (HLG; PQ made HLG); SDR and Log (Rec.709 by now) go in at standard white.
+            if (plan.hdr != ER_HDR_OFF && SourceColors::isHDR(layer.color)) {
+                L.transfer = SourceColors::isPQ(layer.color) ? ER_TF_PQ : ER_TF_HLG;
+            } else {
+                L.colorCube = addCube(SourceColors::cube(layer.color));
+                L.transfer = ER_TF_709;
+            }
             break;
         }
         case PlanLayer::Kind::image:
             L.kind = ER_LAYER_PICTURE;
             L.source = addSource(*layer.still);
             fit(L, layer.still->displayWidth(), layer.still->displayHeight());
+            L.transfer = ER_TF_SRGB;
             break;
         case PlanLayer::Kind::solid: {
             const RGBA& c = layer.rgba;
             L.kind = ER_LAYER_SOLID;
             L.r = float(c.r * c.a); L.g = float(c.g * c.a); L.b = float(c.b * c.a); L.a = float(c.a);
+            // HDR: a solid's colour is SDR (sRGB), at standard white at most.
+            L.transfer = ER_TF_SRGB;
             break;
         }
         case PlanLayer::Kind::text:
@@ -245,6 +257,7 @@ FrameJob describeFrame(const RenderPlan& plan, double t, const FrameProvider& fr
             L.source = addSource(layer.text->image);
             L.pixX = layer.text->x;
             L.pixY = layer.text->y;
+            L.transfer = ER_TF_SRGB;
             break;
         }
         if (auto w = layer.wipe(t)) L.wipe = float(*w);
@@ -275,8 +288,10 @@ FrameJob describeFrame(const RenderPlan& plan, double t, const FrameProvider& fr
         L.wipe = -1;
         L.gradeCube = -1;
         L.colorCube = -1;
+        L.transfer = ER_TF_SRGB;
         job.layers.push_back(L);
     }
+    job.frame.hdr = plan.hdr;
     job.frame.canvasW = plan.canvasW;
     job.frame.canvasH = plan.canvasH;
     job.frame.outW = plan.outW;

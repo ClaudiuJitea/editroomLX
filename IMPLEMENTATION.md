@@ -1,7 +1,7 @@
 # IMPLEMENTATION — Editroom LX
 
 The plan for porting `../editroom` (Mac, Swift, ~33.9k lines) to Linux (C++20 / Qt 6 / Vulkan), following
-[PROMPT.md](PROMPT.md). Mac baseline: `editroom@7b7b865`, version 1.0.3 (build 4); synced since to `editroom@4272a42`, version 1.0.10 (build 11).
+[PROMPT.md](PROMPT.md). Mac baseline: `editroom@7b7b865`, version 1.0.3 (build 4); synced since to `editroom@5f31e48`, version 1.1.2 (build 16).
 
 Contents:
 1. Inventory of the Mac app
@@ -31,12 +31,12 @@ Contents:
 |---|---|---|---|
 | App shell | `App/EditroomApp.swift` (318), `Shortcuts.swift` (315), `Updates.swift`, `UpdateDriver.swift` (230) | Window, menus, file-open delegate, editable shortcuts, Sparkle | `src/app/` |
 | Test hooks | `App/SelfTest.swift` (2177), `FormatCheck.swift` (165) | Headless self-tests, `--bench`, `--format-check`, ~60 `--flags` | `src/app/SelfTest*`, `tests/` |
-| Model | `Model/Project.swift` (987), `EditorModel.swift` (2582), `ColorGrade.swift` (332), `SpeedRamp.swift` (186), `ZoomMove.swift` (105), `Captions.swift` (279), `MediaFolders.swift` (202), `SourcePreview.swift` (101) | Data model, edits, undo, grade maths, ramp maths, captions layout, linked folders | `src/model/` (pure C++, no Qt GUI) |
+| Model | `Model/Project.swift` (987), `EditorModel.swift` (2582), `Workspace.swift` (165, the tabs), `ColorGrade.swift` (332), `SpeedRamp.swift` (186), `ZoomMove.swift` (105), `Captions.swift` (279), `MediaFolders.swift` (202), `SourcePreview.swift` (101) | Data model, edits, undo, grade maths, ramp maths, captions layout, linked folders | `src/model/` (pure C++, no Qt GUI) |
 | Engine | `Engine/CompositionBuilder.swift` (440), `TimelineCompositor.swift` (269), `SourceColor.swift` (255), `PlaybackEngine.swift` (666), `AudioStream.swift` (355), `AudioScrubber.swift` (163), `Exporter.swift` (449), `Loudness.swift` (162), `Meters.swift` (111), `MediaStore.swift` (737), `Reverser.swift` (307), `ScrubCache.swift` (205), `ScrubStrips.swift` (121), `CaptionRenderer.swift` (124), `ReadGuard.swift` (60) | Timeline → render plan, compositor, HDR/Log, player, audio streaming and scrubbing, export, loudness, meters, media import and caches, reversing | `src/engine/`, `src/rendering/`, `src/media/`, `src/audio/` |
 | On-device analysis | `Engine/SceneTags.swift` (400), `Transcripts.swift` (314), `Magic/MediaAnalyzer.swift` (464) | Vision tags, speech transcripts, shot quality, beat tracking | `src/analysis/` |
 | Magic | `Magic/*` (20 files, ~6.3k) | Claude/ChatGPT agent runs on a draft, Local planner (LocalBrain, AutoPlanner, LocalImprover…), the swarm/thinking show | `src/magic/` |
 | MCP | `MCP/*` (6 files, ~2.4k) | Streamable-HTTP MCP server on 127.0.0.1:47920, stdio bridge (`--mcp`), 60-plus tools, agent connect, downloads, contact sheets | `src/mcp/` |
-| UI | `UI/*` (15 files, ~10.9k) | ContentView, Library, Preview, Inspector, Timeline canvas/panel, Export sheet/progress, Magic popover, Settings, Theme | `src/ui/` |
+| UI | `UI/*` (16 files, ~11.3k) | ContentView (and WindowRoot), TabStrip, Library, Preview, Inspector, Timeline canvas/panel, Export sheet/progress, Magic popover, Settings, Theme | `src/ui/` (Workspace, TabStrip, MainWindow…) |
 | Build/release | `scripts/*`, `Vendor/ffmpeg`, `appcast.xml`, `.githooks/pre-commit` | ffmpeg build, release, DMG, notarize, Sparkle feed | `scripts/`, `packaging/` |
 
 Things the code shows that the README doesn't, all of which LX must copy:
@@ -51,6 +51,16 @@ Things the code shows that the README doesn't, all of which LX must copy:
 - **Curved fades are approximated with 16 linear pieces, and ducking with 50 ms pieces**: replicate this
   exactly, so the audio matches the Mac sample for sample (within resampler noise).
 - **Speed limits for sound**: a clip's sound plays only when its speed is between 1/32 and 32.
+- **Tabs (1.1)**: every tab is an `EditorModel` with a slot; only the one in front plays, rebuilds and serves the AI
+  apps, the others let go of their player. Slots and the tab in front are kept (`tabSlots`, `activeTab`), and each
+  tab's `lastSession`/`recoveryFor` keys and recovery copy carry its slot. Tabs behind reopen when first shown.
+  Copied clips are shared by every tab, with their media and track places, so a paste into another project brings
+  the media (reusing what's there by file) and keeps V3 on V3.
+- **HDR projects (1.1)**: `Project.hdr` (nil is SDR). The composite runs in linear Rec.2020 with SDR white at 1.0;
+  the grade works on the HLG signal; the export is HEVC Main 10 tagged BT.2020/HLG whatever codec was picked;
+  snapshots for AI apps stay SDR; matching a sequence to a clip never makes it HDR.
+- **Grade levels and off (1.0.12)**: a level adds `level/100 × 0.2` of grey to its range's wheel offset; an off grade
+  bakes no cube but is kept and saved; changing a grade turns it back on.
 - **Scrub frames** are 12 per second, up to 1920 px, stored as HEIC files on disk, with a 6 GB cap evicting
   the files used longest ago. **Hover strips** are 24–120 JPEGs at 480 px.
 - **The export loudness target** measures BS.1770 integrated loudness first, then applies
@@ -123,7 +133,10 @@ matters.
 | `Network.framework` `NWListener` | MCP HTTP server | `QTcpServer` bound to `QHostAddress::LocalHost`, port 47920, or any free port if taken | The same JSON-RPC, the same "hello/list answered by the bridge" trick |
 | `Process` (Claude Code / Codex) | Magic agent runs | `QProcess` with the same argument lists; the CLIs are found on `$PATH`, `~/.local/bin` and `~/.npm-global/bin` | `claude` and `codex` are both on this dev box |
 | `.mcpb` Claude extension, bundle IDs | Connect Claude Desktop / ChatGPT | `claude mcp add …`, `~/.codex/config.toml`; Claude Desktop is offered only when it is installed (detected); the ChatGPT desktop app isn't on Linux, so Codex CLI is the ChatGPT route | Wording stays "Claude" / "ChatGPT" |
-| MetalFX `MTLFXSpatialScaler` | Export upscaling (1.0.5) | FSR 1 EASU in `Kernel.inc` (GPU and CPU) | Export only; video fitted at more than 1.01× |
+| MetalFX `MTLFXSpatialScaler` | Export upscaling (1.0.5) | FSR 1 EASU in `Kernel.inc` (GPU and CPU) | Export only; video fitted at more than 1.01×; not in HDR projects (as on the Mac) |
+| Core Image `extendedLinearITUR_2020` context, `matchedToWorkingSpace(from:)` | HDR projects (1.1) | `ColorMath.h`: BT.2100 HLG (OOTF gamma 1.2 at 1000 cd/m²), PQ over 203 cd/m², BT.709 and sRGB curves, BT.2087 matrices; a per-layer `transfer` and the frame's `hdr` mode in `Kernel.inc` | GPU ≡ CPU (`tst_gpu` hdr cases); HLG levels as the Mac's self-test |
+| EDR (`wantsExtendedDynamicRangeContent`) | Showing HLG in the viewer | Shown as SDR for now (`ER_HDR_VIEW`: SDR white at white, highlights clipped) | An HDR swapchain needs `VK_EXT_swapchain_colorspace` and Wayland colour management (§17) |
+| `SpeechTranscriber.supportedLocales` | Speech language (1.0.12) | whisper.cpp's language list; Automatic = whisper's own detection | |
 | Sparkle (EdDSA appcast) | Updates | `Updates` reads the same `appcast.xml` with a `sparkle:os="linux"` enclosure; EdDSA verified with libsodium; the AppImage replaces itself; Flatpak and distro packages get "Open release page" | The alert wording and layout match `UpdateDriver` |
 | `NSOpenPanel/NSSavePanel` | Open/import/save/export | `QFileDialog` (uses xdg-desktop-portal under Flatpak) | |
 | `NSAlert` | Alerts | `EditroomAlert` (styled `QDialog`), the same text and button order | Mac order is [Cancel][Default] on the right: keep it |
@@ -196,6 +209,12 @@ For output time `t` (with +1e-4, as on the Mac), on a canvas of `instruction.can
 8. Reframe: translate by `−offset` (crop window), crop to the output.
 9. Captions: drawn in output space, over everything.
 10. Output tagged BT.709 (primaries, transfer and matrix), unmanaged (no colour-space conversion anywhere).
+
+**HDR projects (1.1).** The same steps, with each layer brought into linear Rec.2020 after its source colour (HDR
+clips as HLG or PQ; SDR video and Log after its cube through BT.709's curve; titles, solids, photos and captions as
+sRGB), the grade done on the HLG signal (linear → HLG, cube, back), opacity and source-over in linear light, and the
+result written as HLG (the export, P010 with BT.2020's matrix) or as Rec.709 for a screen without HDR (the viewer,
+thumbnails, AI snapshots). `RenderPlan.hdr` carries the mode; `BuildOptions.hdrOutput` picks HLG.
 
 **Order and coordinate conventions matter.** Core Image is y-up. LX works y-down internally and converts
 every y term (text `1−y`, transform `−y`, reframe `top`) in `RenderPlan`, with unit tests pinning each one.
@@ -314,6 +333,8 @@ is false. CI runs them twice: on the real GPU when present, and on lavapipe (`VK
   `+faststart`, BT.709 tags (`color_primaries/trc/colorspace = bt709`, range tv).
 - Loudness target: measure, then `gain = min(target − lufs, −1 − peak)` added to every track's gain, as on
   the Mac. Waits for reversed audio first, as on the Mac.
+- HDR projects: HEVC Main 10 from P010 (hevc_vaapi → hevc_nvenc → libx265), tagged `bt2020`/`arib-std-b67`/`bt2020nc`,
+  limited range; packed on the GPU (`pack.comp`'s 10-bit mode) and read back once, 3 bytes a pixel.
 - `ExportQueue`: one at a time in the background, each a snapshot of the project, ETA once enough progress
   has been made, finished items tidying themselves away, cancel. The same pill UI in the title strip.
 - Pixel parity for export is checked on the **pre-encode** frames (bit-for-bit against the CPU path,
@@ -325,8 +346,10 @@ is false. CI runs them twice: on the real GPU when present, and on lavapipe (`VK
 
 ### 8.1 Window and chrome
 - A `QMainWindow` with **native decorations**, plus a 38 px "title strip" (the palette's `panel`
-  colour) carrying the centred title and dirty dot, the export progress pill, the Magic button and the
-  Export pill. This copies the Mac's unified toolbar. Client-side decorations (`Qt::FramelessWindowHint`
+  colour) carrying the project tabs (`TabStrip`: each as wide as its name, 84–190 px, the one in front in a pill
+  with ×, a dot for unsaved changes, + for a new tab, "N more tabs ⌄" for those that don't fit), the export
+  progress pill, the Magic button and the Export pill. The panels under it are built for the tab in front
+  (`MainWindow::buildEditor`), as the Mac rebuilds `ContentView` per tab. This copies the Mac's unified toolbar. Client-side decorations (`Qt::FramelessWindowHint`
   with our own traffic-light-free controls) are optional later, behind a setting, because of Wayland and
   tiling-WM differences.
 - Layout as in `ContentView`: Library (252, 190–440) | splitter | Preview | hairline | Inspector (320),
@@ -342,7 +365,7 @@ is false. CI runs them twice: on the real GPU when present, and on lavapipe (`VK
 
 ### 8.2 Menus (exact titles and order)
 ```
-File:  New  Open…  Open Recent ▸ (… / Clear Menu) | Save  Save As… | Import Media…  Export… | Quit Editroom
+File:  New  New Tab  Open…  Open Recent ▸ (… / Clear Menu) | Close Tab  Save  Save As… | Import Media…  Export… | Quit Editroom
 Edit:  Undo  Redo | (Cut Copy Paste Select All for text fields) | Settings…
 Clip:  Split at Playhead  Add Dissolve  Even Out Audio Levels  Detach Audio  Duplicate  Freeze Frame  Reverse |
        Copy Grade  Paste Grade | Match Sequence to Clip | Delete  Ripple Delete  Ripple Trim Start to Playhead
@@ -350,6 +373,7 @@ Clip:  Split at Playhead  Add Dissolve  Even Out Audio Levels  Detach Audio  Dup
        Add Video Track  Add Audio Track
 Mark:  Add Marker  Clear All Markers | Set In  Set Out  Clear In and Out
 View:  Zoom In  Zoom Out  Zoom to Fit | ☐Filmstrips ☐Snapping ☐Sticky Edges ☐Skimming ☐Audio Scrubbing | Enter Full Screen
+Window: Show Previous Tab  Show Next Tab
 Help:  About Editroom  Check for Updates…
 ```
 The enabled rules come from the same model properties (`canAddDissolve`, `selectionIsLinked`…). `--dump-menu`
@@ -367,7 +391,8 @@ prints the same `MENU` lines as the Mac, so `parity-diff.py` can compare the two
   and document the WM setting in `PARITY.md`. Ctrl+drag is **not** added (that would diverge from the Mac).
 
 ### 8.4 Settings
-The same tabs and sections (General: Theme / View / Saving; Shortcuts with groups File / Edit / Playback /
+The same tabs and sections (General: Theme / View / Saving / Transcription (Speech language), plus LX's "On this
+computer" model downloads; Shortcuts with groups File / Edit / Playback /
 Tools / Clip / Mark / View, record / remove / restore, "Restore Defaults"; Magic: Enable Magic, Show Magic at
 work, AI apps, Editing from other apps; Updates: Software Update, Release Notes). The same keys
 (`settingsTab`, …).
@@ -438,8 +463,9 @@ the GPU (§16). The beat tracker's FFTs use pocketfft, with VkFFT as a P3 candid
 - Paths: Mac projects contain `/Users/...` absolute paths. Opening runs `resolveMovedMedia` (`relativePath`
   first), then the linked-folder rules, then offers "Locate…", as on the Mac. Saving writes the Linux
   absolute path and a fresh `relativePath`, so a project folder carried between the Mac and Linux keeps working.
-- Recovery: `$XDG_DATA_HOME/Editroom/Recovery/Untitled.room`, with 1 s idle autosave, `lastSession`
-  and `recoveryFor`. The same "Save, Don't Save, Cancel" on quit when autosave is off.
+- Recovery: `$XDG_DATA_HOME/Editroom/Recovery/Untitled.room` (the first tab; `Untitled <slot>.room` for the
+  others, `Untitled (test).room` for test launches), with 1 s idle autosave, `lastSession` and `recoveryFor`
+  (suffixed `.<slot>` for tabs after the first). The same "Save, Don't Save, Cancel" on quit when autosave is off.
 - Sidecars (MediaNotes, analysis, transcripts, tags, reversed audio, scrub caches) keep their Mac
   names and layouts where they are data; internal caches may differ (scrub cache format, §3).
 
@@ -567,6 +593,8 @@ measuring it.
 | ContactSheet for agents (grid of frames + time labels) | CPU (AppKit) | Compose the grid in `GpuGraph`, labels as a text layer | P3 | ms per sheet |
 | Reversed audio render | CPU, I/O bound | none | — | — |
 | Export pre-encode RGB→YUV | GPU (planned) | Zero-copy DMA-BUF into VA-API (no readback) | **P1** | × realtime on 4K export |
+| HDR export's P010 pack (1.1) | Done: `pack.comp`'s 10-bit BT.2020 mode (166–170 → 38.5–40 ms a 4K frame) | Next: hand P010 to VA-API as a DMA-BUF | P2 | × realtime of a 4K HDR export |
+| HDR viewer output (1.1) | SDR view | HLG/PQ swapchain on HDR screens | P2 | That it matches the export on an HDR screen |
 
 ---
 
@@ -601,8 +629,11 @@ measuring it.
 10. **Local models' size and quality.** Whisper/LLM/CLIP downloads total about 1–3 GB, and are opt-in, with
     progress, cancel, checksums and a "Remove downloaded models" button. The quality of Local Magic's request
     understanding will differ from Apple's model. Measure it with the Mac's LocalBrain test prompts.
-11. **HDR display output.** The Mac converts everything to Rec.709 SDR, so there is no HDR presentation to
-    match. LX doesn't add one either.
+11. **HDR display output.** Since 1.1 the Mac shows an HDR project's frames with the screen's headroom (EDR).
+    Linux HDR output needs the compositor's colour-management protocol (KDE Plasma 6, GNOME 48+) and a Vulkan
+    swapchain in an HDR colour space; LX shows HDR projects as SDR until that can be checked on an HDR screen.
+12. **Tabs and resources.** A tab behind keeps its editor (undo history, library, caches) but no player; every
+    player shares one Vulkan device. Many tabs of large projects still hold their libraries and caches in memory.
 
 ---
 

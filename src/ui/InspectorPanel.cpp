@@ -163,6 +163,7 @@ QByteArray InspectorPanel::signature() const {
         add(QByteArray::number(int(picked.size())));
         if (picked.size() == 1) add(picked.front().toUtf8());
         add(m.captionsWaiting() ? "w" : "-");
+        add(c_.transcripts().unsupportedLanguage().toUtf8());
         return k;
     }
     if (clips.empty()) {
@@ -170,6 +171,7 @@ QByteArray InspectorPanel::signature() const {
         for (const auto& a : p.assets) if (a.kind == MediaKind::video) hasVideo = true;
         add("sequence");
         add(!p.settingsLocked && !hasVideo ? "note" : "-");
+        add(p.isHDR() ? "hdr" : "sdr");
         return k;
     }
     add(rampOrigin_ ? "ramping" : "-");
@@ -187,6 +189,7 @@ QByteArray InspectorPanel::signature() const {
         add(c.fadeIn > 0 || c.fadeOut > 0 ? "fade" : "-");
         const ColorGrade g = c.grade.value_or(ColorGrade());
         add(g.isNeutral() ? "n" : "-");
+        add(g.off ? "off" : "on");
         add(g.look ? "l" : "-");
         // The transitions either side, when it's the only picture.
         const Clip* before = p.previousTouching(c);
@@ -283,7 +286,14 @@ void InspectorPanel::captionSection(QVBoxLayout* v) {
                            [](CaptionStyle& x, RGBA c) { x.highlightColor = c; }));
     s->add(captionColorRow(QStringLiteral("Outline"), QStringLiteral("a.square"), st.outline, [](const CaptionStyle& x) { return x.outlineColor; },
                            [](CaptionStyle& x) { x.outline = !x.outline; }, [](CaptionStyle& x, RGBA c) { x.outlineColor = c; }));
-    if (m.captionsWaiting()) s->add(note(QStringLiteral("Listening for what's said in the captioned clips…")));
+    if (m.captionsWaiting()) {
+        s->add(note(QStringLiteral("Listening for what's said in the captioned clips…")));
+    } else if (const QString language = c_.transcripts().unsupportedLanguage(); !language.isEmpty()) {
+        // Said, rather than captions made from the wrong language.
+        auto* n = note(QStringLiteral("%1 speech can't be transcribed on this computer yet. You can choose the speech language in Settings › General.").arg(language));
+        n->setStyleSheet(QStringLiteral("color: %1; background: transparent;").arg(Theme::textDim().name()));
+        s->add(n);
+    }
     v->addWidget(s);
 }
 
@@ -299,7 +309,8 @@ QWidget* InspectorPanel::captionColorRow(const QString& label, const QString& ic
     const bool off = on.has_value() && !*on;
     if (on && toggle) {
         auto* eye = new CaptionEye(*on, [this, toggle] { model().setCaptionStyle(toggle); });
-        row = labelledRow(RowIcon::symbol(icon), label, {eye, well}, off);
+        // An eye right after the name, to show or hide them (as Grade's beside its title).
+        row = labelledRow(RowIcon::symbol(icon), label, {well}, off, -1, eye);
     } else {
         row = labelledRow(RowIcon::symbol(icon), label, {well}, off);
     }
@@ -335,6 +346,16 @@ void InspectorPanel::sequenceSection(QVBoxLayout* v) {
     for (const auto& a : p.assets) if (a.kind == MediaKind::video) hasVideo = true;
     if (!p.settingsLocked && !hasVideo) rate->add(note(QStringLiteral("Matches the first video you import."), 10));
     v->addWidget(rate);
+    // Folded unless opened (it stays as left): most work is SDR, and HDR is picked here on purpose. Folded, a dot says
+    // the project is HDR.
+    auto* range = new InspectorSection(QStringLiteral("Dynamic range"), std::nullopt, true, p.isHDR());
+    auto* dyn = new MenuField(p.isHDR() ? QStringLiteral("HDR (HLG)") : QStringLiteral("SDR (Rec. 709)"));
+    dyn->menu()->addAction(QStringLiteral("SDR (Rec. 709)"), this, [&m] { m.setHDR(false); });
+    dyn->menu()->addAction(QStringLiteral("HDR (HLG)"), this, [&m] { m.setHDR(true); });
+    range->add(dyn);
+    range->add(note(p.isHDR() ? QStringLiteral("HDR footage keeps its bright highlights and exports as 10\u2011bit HEVC.")
+                              : QStringLiteral("HDR footage is converted to SDR."), 10));
+    v->addWidget(range);
     onRefresh([this, size, fields, fps] {
         const Project& q = model().project();
         size->setLabel(QStringLiteral("%1 × %2").arg(q.width).arg(q.height));
@@ -744,6 +765,8 @@ void InspectorPanel::colorSection(QVBoxLayout* v, const std::vector<Clip>& clips
         for (auto& x : p.clips) {
             if (!ids.count(x.id)) continue;
             ColorGrade g = x.grade.value_or(ColorGrade());
+            // Changing a grade that's off turns it on, so it isn't adjusted blind.
+            g.off = false;
             body(g);
             if (g.isNeutral()) x.grade.reset(); else x.grade = g;
         }
@@ -758,22 +781,44 @@ void InspectorPanel::colorSection(QVBoxLayout* v, const std::vector<Clip>& clips
     std::optional<InspectorSection::Action> reset;
     if (!grade.isNeutral()) reset = InspectorSection::Action{QStringLiteral("Reset"), [once] { once([](ColorGrade& g) { g = ColorGrade(); }); }};
     auto* s = new InspectorSection(QStringLiteral("Grade"), reset, true, !grade.isNeutral());
+    bool graded = false, off = false;
+    for (const auto& c : clips) {
+        if (c.grade && !c.grade->isNeutral()) graded = true;
+        if (c.grade && c.grade->off) off = true;
+    }
+    // The eye: the grade off (kept, but not shown or exported) or on again, for every picked clip that has one.
+    if (graded) {
+        s->setAccessory(new GradeEye(off, [&m, ids, off] {
+            m.mutate([&](Project& p) {
+                for (auto& x : p.clips) {
+                    if (!ids.count(x.id) || !x.grade || x.grade->isNeutral()) continue;
+                    x.grade->off = !off;
+                }
+            });
+        }));
+    }
 
     auto* wheels = new QWidget;
     auto* wh = new QHBoxLayout(wheels);
     wh->setContentsMargins(0, 4, 0, 4);
     wh->setSpacing(0);
-    struct W { const char* title; WheelPoint ColorGrade::*field; };
-    for (const W& wd : {W{"Shadows", &ColorGrade::shadows}, W{"Midtones", &ColorGrade::midtones}, W{"Highlights", &ColorGrade::highlights}}) {
+    struct W { const char* title; WheelPoint ColorGrade::*field; double ColorGrade::*level; };
+    for (const W& wd : {W{"Shadows", &ColorGrade::shadows, &ColorGrade::shadowsLevel}, W{"Midtones", &ColorGrade::midtones, &ColorGrade::midtonesLevel},
+                        W{"Highlights", &ColorGrade::highlights, &ColorGrade::highlightsLevel}}) {
         const auto field = wd.field;
-        auto* wheel = new ColorWheel(QLatin1String(wd.title), grade.*field,
+        const auto level = wd.level;
+        auto* wheel = new ColorWheel(QLatin1String(wd.title), grade.*field, grade.*level,
                                      [this, live, field](WheelPoint pt) {
                                          if (editing_ == 0) editing(true);
                                          live([&](ColorGrade& g) { g.*field = pt; });
                                      },
+                                     [this, live, level](double val) {
+                                         if (editing_ == 0) editing(true);
+                                         live([&](ColorGrade& g) { g.*level = val; });
+                                     },
                                      [this] { model().commitLive(); if (editing_ > 0) editing(false); });
         wh->addWidget(wheel, 1);
-        onRefresh([wheel, current, field] { wheel->setPoint(current().*field); });
+        onRefresh([wheel, current, field, level] { wheel->setPoint(current().*field); wheel->setLevel(current().*level); });
     }
     s->add(wheels);
 

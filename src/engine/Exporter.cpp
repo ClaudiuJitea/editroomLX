@@ -52,6 +52,8 @@ ExportResult runExport(const Project& whole, MediaStore& media, SoundStore& soun
         if (settings.crops(project)) o.reframe = std::make_pair(settings.reframeX, settings.reframeY);
         // Video drawn bigger than its pixels (a 1080p sequence at 4K) is upscaled, not stretched.
         o.upscale = true;
+        // An HDR project's frames are HLG.
+        o.hdrOutput = true;
         plan = CompositionBuilder::build(project, media, o);
         if (!plan) { res.error = QStringLiteral("The timeline is empty."); return res; }
         WriterSettings::Video v;
@@ -60,6 +62,9 @@ ExportResult runExport(const Project& whole, MediaStore& media, SoundStore& soun
         v.fpsNum = fd.first;
         v.fpsDen = fd.second;
         v.hevc = settings.codec == ExportSettings::Codec::hevc;
+        // An HDR project: 10-bit HEVC in HLG, Rec.2020 (H.264 can't carry HDR), as an iPhone records it.
+        v.hdr = project.isHDR();
+        if (v.hdr) v.hevc = true;
         v.bitrate = settings.videoBitrate(w, h, project.fps);
         v.gop = int(std::round(project.fps * 2));
         ws.video = v;
@@ -105,9 +110,18 @@ ExportResult runExport(const Project& whole, MediaStore& media, SoundStore& soun
         if (cancel) { writer->abort(); res.cancelled = true; return res; }
         FrameJob job = next.get();
         if (k + 1 < frames) next = std::async(std::launch::async, describe, k + 1);
-        std::vector<uint8_t> nv12 = gpu ? gpu->renderNV12(job) : std::vector<uint8_t>();
-        if (nv12.empty()) nv12 = CpuRenderer::renderNV12(job);
-        if (!writer->writeVideo(nv12.data(), k)) { writer->abort(); res.error = QStringLiteral("The encoder stopped."); return res; }
+        bool wrote;
+        if (writer->isHDR()) {
+            // Composed and packed as 10-bit (P010) on the GPU, one read back; the CPU does the same without one.
+            std::vector<uint16_t> p010 = gpu ? gpu->renderP010(job) : std::vector<uint16_t>();
+            if (p010.empty()) p010 = CpuRenderer::renderP010(job);
+            wrote = writer->writeVideo10(p010.data(), k);
+        } else {
+            std::vector<uint8_t> nv12 = gpu ? gpu->renderNV12(job) : std::vector<uint8_t>();
+            if (nv12.empty()) nv12 = CpuRenderer::renderNV12(job);
+            wrote = writer->writeVideo(nv12.data(), k);
+        }
+        if (!wrote) { writer->abort(); res.error = QStringLiteral("The encoder stopped."); return res; }
         if (!writeAudioUntil(double(k + 1) * frameSeconds)) { writer->abort(); res.error = QStringLiteral("The encoder stopped."); return res; }
         const double p = double(k + 1) / double(frames);
         if (p - lastReported >= 0.005) { lastReported = p; if (progress) progress(std::min(1.0, p)); }

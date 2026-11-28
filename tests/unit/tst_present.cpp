@@ -3,6 +3,8 @@
 // Skipped offscreen (no window system to present to).
 #include "ui/Controller.h"
 #include "ui/PreviewPanel.h"
+#include "ui/MainWindow.h"
+#include "ui/Workspace.h"
 #include "ui/Theme.h"
 #include <QApplication>
 #include <QElapsedTimer>
@@ -115,6 +117,95 @@ private slots:
         });
         const double presentMs = timeIt([&] { gpu->present(job); });
         qInfo().noquote() << QStringLiteral("1920x1080: read back + image %1 ms, presented %2 ms").arg(readBack, 0, 'f', 2).arg(presentMs, 0, 'f', 2);
+    }
+
+    void presentsZoomed() {
+        // Zoomed in (200%), the viewer still presents, in a window over just the part in view, showing that part of the
+        // frame (the Mac's Metal layer is scaled; LX blits the part in view).
+        const QString platform = QGuiApplication::platformName();
+        if (platform != QLatin1String("xcb") && platform != QLatin1String("wayland")) QSKIP("Needs a display (X11 or Wayland)");
+        qunsetenv("QT_QTESTLIB_RUNNING");
+        const QString path = QStringLiteral(ER_TEST_MEDIA "/sdr_h264.mp4");
+        if (!QFile::exists(path)) QSKIP("Run scripts/make-test-clips.py --set tests/media first");
+        Controller c;
+        if (!c.engine().presentInstance()) QSKIP("No Vulkan device that can present");
+        auto a = c.media().importFile(path);
+        c.model().changeLibrary([&](Project& p) { p.assets.push_back(*a); p.width = 640; p.height = 360; });
+        Clip v(c.model().project().videoTracks[0].id, ClipKind::video, 0, 2);
+        v.assetID = a->id;
+        c.model().mutate([&](Project& p) { p.clips = {v}; });
+        PreviewPanel panel(c);
+        panel.resize(700, 520);
+        panel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        QTRY_VERIFY_WITH_TIMEOUT(panel.viewer()->presenting(), 5000);
+        panel.setZoom(2.0);
+        QTest::qWait(300);
+        QTRY_VERIFY_WITH_TIMEOUT(panel.viewer()->presenting(), 5000);
+        // Bigger than the view: it scrolls, and only what's in view is presented.
+        const QRectF pic = panel.viewer()->picture();
+        const QRect inView = panel.viewer()->visibleRegion().boundingRect();
+        QVERIFY(pic.width() > inView.width());
+        c.engine().gpu()->capturePresented();
+        c.engine().redraw();
+        QTRY_VERIFY_WITH_TIMEOUT(!c.engine().gpu()->presentedImage().isNull(), 5000);
+        const QImage shown = c.engine().gpu()->presentedImage();
+        // The same frame read back, cut to what's in view, against what was presented.
+        c.engine().setPresenting(false);
+        QSignalSpy back(&c.engine(), &PlaybackEngine::frameReady);
+        c.engine().redraw();
+        QVERIFY(back.wait(5000));
+        const QImage frame = back.last().at(0).value<QImage>();
+        const QRectF part = pic.intersected(QRectF(inView));
+        const QRect crop(int((part.left() - pic.left()) / pic.width() * frame.width()), int((part.top() - pic.top()) / pic.height() * frame.height()),
+                         int(part.width() / pic.width() * frame.width()), int(part.height() / pic.height() * frame.height()));
+        const QImage ref = frame.copy(crop).scaled(shown.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        int worst = 0;
+        for (int i = 1; i < 10; ++i) {
+            const QPoint p(shown.width() * i / 10, shown.height() * i / 10);
+            const QRgb x = shown.pixel(p), y = ref.pixel(p);
+            worst = std::max({worst, std::abs(qRed(x) - qRed(y)), std::abs(qGreen(x) - qGreen(y)), std::abs(qBlue(x) - qBlue(y))});
+        }
+        qInfo() << "zoomed: presented" << shown.size() << "of" << frame.size() << "crop" << crop << "worst" << worst;
+        QVERIFY(worst <= 24);
+    }
+
+    void presentsAfterSwitchingTabs() {
+        // Tabs (1.1): every tab's player shares one GPU, and the window surface goes to the viewer in front. Switching
+        // away and back, the viewer in front still presents; the tab behind has let go of its player.
+        const QString platform = QGuiApplication::platformName();
+        if (platform != QLatin1String("xcb") && platform != QLatin1String("wayland")) QSKIP("Needs a display (X11 or Wayland)");
+        qunsetenv("QT_QTESTLIB_RUNNING");
+        const QString path = QStringLiteral(ER_TEST_MEDIA "/a_main.mp4");
+        if (!QFile::exists(path)) QSKIP("Run scripts/make-test-clips.py --set tests/media first");
+        Workspace w(false);
+        MainWindow win(w);
+        win.resize(1480, 940);
+        win.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&win));
+        auto load = [&](Controller& c) {
+            auto a = c.media().importFile(path);
+            c.model().changeLibrary([&](Project& p) { p.assets.push_back(*a); });
+            Clip v(c.model().project().videoTracks[0].id, ClipKind::video, 0, 4);
+            v.assetID = a->id;
+            c.model().mutate([&](Project& p) { p.clips = {v}; });
+        };
+        load(win.controller());
+        if (!win.controller().engine().presentInstance()) QSKIP("No Vulkan device that can present");
+        auto viewer = [&] { return win.findChild<PreviewPanel*>()->viewer(); };
+        QTRY_VERIFY_WITH_TIMEOUT(viewer()->presenting(), 5000);
+        Controller* first = &win.controller();
+        w.newTab();
+        load(win.controller());
+        QTRY_VERIFY_WITH_TIMEOUT(viewer()->presenting(), 5000);
+        QVERIFY(first->isBackground() && first->engine().isEmpty());
+        for (int round = 0; round < 3; ++round) {
+            w.select(round % 2 == 0 ? 0 : 1);
+            QTRY_VERIFY_WITH_TIMEOUT(viewer()->presenting(), 5000);
+            QSignalSpy presented(&win.controller().engine(), &PlaybackEngine::framePresented);
+            win.controller().engine().seek(1.0 + round * 0.5);
+            QVERIFY2(presented.wait(5000), qPrintable(QStringLiteral("round %1").arg(round)));
+        }
     }
 };
 

@@ -21,6 +21,8 @@ class Viewer : public QWidget {
     Q_OBJECT
 public:
     explicit Viewer(Controller& c, QWidget* parent = nullptr);
+    /// The Vulkan window (and its surface) goes before the instance it was made on (a tab's views going).
+    ~Viewer() override;
     void setFrame(const QImage& img) { frame_ = img; update(); }
     /// The picture's place in the widget.
     QRectF picture() const;
@@ -31,6 +33,8 @@ protected:
     void mouseReleaseEvent(QMouseEvent*) override;
     void leaveEvent(QEvent*) override { promptHover_ = false; update(); }
     void resizeEvent(QResizeEvent*) override { updatePresenting(); }
+    /// Scrolled (zoomed in): what's in view moved.
+    void moveEvent(QMoveEvent*) override { updatePresenting(); }
     void showEvent(QShowEvent*) override { updatePresenting(); }
     void hideEvent(QHideEvent*) override { updatePresenting(); }
 public:

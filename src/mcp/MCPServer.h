@@ -12,8 +12,10 @@ namespace er {
 namespace MCPHandler {
 /// initialize, ping and tools/list: needing nothing from the editor.
 std::optional<QJsonObject> handshake(const QJsonObject& req);
-/// What an agent asks just to get started: answered without opening Editroom when it's closed.
-bool isStartup(const QString& method);
+/// Whether a request needs Editroom itself, and opens it when it's closed: only using a tool does. Everything
+/// else an agent sends (its hello, pings, asking what there is, as it starts up or now and then) is answered
+/// without it, so an AI app starting or idling never opens Editroom.
+bool opensEditroom(const QString& method);
 QJsonObject error(const QJsonValue& id, int code, const QString& message);
 }
 
@@ -23,6 +25,8 @@ public:
     static constexpr quint16 port = 47920;
     struct Client { QString id, name; QDateTime lastSeen; };
     explicit MCPServer(Controller& c, QObject* parent = nullptr);
+    /// Only the tab in front talks to the AI apps.
+    void setController(Controller& c) { c_ = &c; }
     bool start();
     void stop();
     bool running() const { return server_.isListening(); }
@@ -43,15 +47,16 @@ signals:
 
 private:
     void serve(QTcpSocket* s);
-    Controller& c_;
+    Controller* c_;
     QTcpServer server_;
     QString problem_;
     std::map<QString, Client> clients_;
     bool enabled_ = true;
 };
 
-/// `editroom-lx --mcp`: stdin/stdout lines to and from the running app's server; hello, ping and the
-/// tool list answered here while Editroom is closed; the app launched on the first real call.
+/// `editroom-lx --mcp`: stdin/stdout lines to and from the running app's server. While Editroom is closed,
+/// everything but using a tool is answered here, so an agent starting up or idling doesn't open Editroom; the
+/// first tool it uses opens it.
 int runMCPBridge(int argc, char** argv);
 
 } // namespace er

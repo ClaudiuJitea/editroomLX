@@ -48,6 +48,9 @@ signals:
 protected:
     void paintEvent(QPaintEvent*) override;
     void keyPressEvent(QKeyEvent* e) override;
+    /// While recording, every key comes here first (the Mac's local key monitor): Tab, Return and keys a field or a
+    /// shortcut would take are recorded too.
+    bool eventFilter(QObject* o, QEvent* e) override;
 private:
     enum class Tab { general, shortcuts, magic, updates };
     void showTab(Tab t);
@@ -55,12 +58,16 @@ private:
     QWidget* shortcuts();
     QWidget* magic();
     QWidget* updates();
+    /// Settings › General › Transcription › Speech language.
+    QWidget* speechLanguageRow();
     void fillShortcuts();
+    void startRecording(ShortcutAction a);
+    /// A key while recording: Escape cancels; anything else becomes the shortcut.
+    void record(QKeyEvent* e);
     void setNote(const QString& note);
     Controller& c_;
     ShortcutStore& keys_;
     QWidget* tabRow_;
-    QLabel* title_;
     QStackedWidget* pages_;
     Tab tab_ = Tab::shortcuts;
     // Shortcuts

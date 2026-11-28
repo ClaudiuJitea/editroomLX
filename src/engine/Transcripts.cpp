@@ -8,6 +8,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QLocale>
+#include <QSettings>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
@@ -84,11 +86,67 @@ void Transcripts::downloadModel(std::function<void(double)> progress, std::funct
 
 void Transcripts::cancelDownload() { if (reply_) reply_->abort(); }
 
+QString Transcripts::chosenLanguage() { return QSettings().value(QLatin1String(languageKey)).toString(); }
+
+QString Transcripts::languageName(const QString& identifier) {
+    const QString code = identifier.section(u'_', 0, 0).section(u'-', 0, 0).toLower();
+    const QLocale l(code);
+    if (l.language() == QLocale::C || (l.language() == QLocale::English && code != QLatin1String("en"))) return identifier;
+    return QLocale::languageToString(l.language());
+}
+
+Transcripts::Language Transcripts::resolve() {
+    const QString chosen = chosenLanguage();
+    if (chosen.isEmpty()) return {QStringLiteral("auto"), QString()};
+    const QString code = chosen.section(u'_', 0, 0).section(u'-', 0, 0).toLower();
+    const QString name = languageName(chosen);
+    // An English-only model hears only English.
+    if (QFileInfo(modelPath()).fileName().contains(QLatin1String(".en"))) return {code == QLatin1String("en") ? std::optional<QString>(code) : std::nullopt, name};
+    if (whisper_lang_id(code.toLatin1().constData()) < 0) return {std::nullopt, name};
+    return {code, name};
+}
+
+std::vector<std::pair<QString, QString>> Transcripts::supportedLanguages() {
+    std::vector<std::pair<QString, QString>> out;
+    for (int i = 0; i <= whisper_lang_max_id(); ++i) {
+        const QString code = QString::fromLatin1(whisper_lang_str(i));
+        const QString name = languageName(code);
+        // Only languages Qt can name (whisper also lists a few it can barely hear, by code).
+        if (name != code) out.emplace_back(code, name);
+    }
+    std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return QString::localeAwareCompare(a.second, b.second) < 0; });
+    out.erase(std::unique(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.second == b.second; }), out.end());
+    return out;
+}
+
+QString Transcripts::unsupportedLanguage() const {
+    std::lock_guard g(lock_);
+    return unsupportedLanguage_;
+}
+
+void Transcripts::languageChanged() {
+    std::vector<QString> known;
+    {
+        std::lock_guard g(lock_);
+        std::set<QString> all;
+        for (const auto& [p, t] : made_) all.insert(p);
+        for (const auto& [p, s] : states_) if (s != State::working) all.insert(p);
+        known.assign(all.begin(), all.end());
+        made_.clear();
+        for (const auto& p : known) states_.erase(p);
+        unsupportedLanguage_.clear();
+    }
+    for (const auto& p : known) { emit changed(p); make(p); }
+}
+
 std::optional<Transcript> Transcripts::load(const QString& path) {
     QFile f(file(path));
     if (!f.open(QIODevice::ReadOnly)) return std::nullopt;
     auto t = codec::decodeTranscript(QJsonDocument::fromJson(f.readAll()).object());
     if (!t) return std::nullopt;
+    // Heard in another language than the one now set: heard again.
+    if (const auto now = resolve().code; now && *now != QLatin1String("auto") && !t->language.isEmpty() &&
+        t->language.section(u'_', 0, 0).section(u'-', 0, 0).toLower() != *now) return std::nullopt;
     std::lock_guard g(lock_);
     made_[path] = *t;
     return t;
@@ -126,6 +184,8 @@ void Transcripts::make(const QString& path, bool soon) {
     {
         std::lock_guard g(lock_);
         if (made_.count(path)) return;
+        // Already found the language can't be heard: not tried again until it's changed (languageChanged).
+        if (auto it = states_.find(path); it != states_.end() && it->second == State::unsupported) return;
         if (working_ == path && stale_.count(path)) { states_[path] = State::waiting; return; }
     }
     if (load(path)) {
@@ -150,7 +210,7 @@ void Transcripts::make(const QString& path, bool soon) {
 
 void Transcripts::ready(const QString& path, std::function<void(std::optional<Transcript>)> then, double limit) {
     if (auto t = transcript(path)) { then(t); return; }
-    if (!available() || state(path) == State::failed) { then(std::nullopt); return; }
+    if (!available() || state(path) == State::failed || state(path) == State::unsupported) { then(std::nullopt); return; }
     {
         std::lock_guard g(lock_);
         waiters_[path].push_back(then);
@@ -176,6 +236,20 @@ void Transcripts::next() {
         if (working_ || queue_.empty() || !available()) return;
         path = queue_.front();
         queue_.pop_front();
+        // Not a transcript in the wrong language: none, and said why.
+        if (const auto lang = resolve(); !lang.code) {
+            states_[path] = State::unsupported;
+            unsupportedLanguage_ = lang.name;
+            auto it = waiters_.find(path);
+            auto list = it == waiters_.end() ? std::vector<std::function<void(std::optional<Transcript>)>>{} : std::move(it->second);
+            if (it != waiters_.end()) waiters_.erase(it);
+            QMetaObject::invokeMethod(this, [this, path, list] {
+                for (auto& f : list) f(std::nullopt);
+                emit changed(path);
+                next();
+            }, Qt::QueuedConnection);
+            return;
+        }
         working_ = path;
         states_[path] = State::working;
     }
@@ -255,7 +329,9 @@ std::optional<Transcript> Transcripts::transcribe(const QString& path) {
     p.print_timestamps = false;
     p.print_special = false;
     p.translate = false;
-    p.language = "auto";
+    // The speech language from Settings, or heard from the speech itself (Automatic).
+    const QByteArray language = resolve().code.value_or(QStringLiteral("auto")).toLatin1();
+    p.language = language.constData();
     p.detect_language = false;
     p.n_threads = std::max(1, QThread::idealThreadCount() - 1);
     // One word a segment, with its time.

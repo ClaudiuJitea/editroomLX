@@ -111,6 +111,11 @@
     "App/EditroomApp.swift"
    ]
   },
+  "Automatic": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
   "Automatically download and install updates in the future": {
    "mac": [
     "App/UpdateDriver.swift"
@@ -229,6 +234,22 @@
   "Close All Gaps": {
    "mac": [
     "App/EditroomApp.swift"
+   ]
+  },
+  "Close Other Tabs": {
+   "mac": [
+    "UI/TabStrip.swift"
+   ]
+  },
+  "Close Tab": {
+   "mac": [
+    "App/EditroomApp.swift",
+    "UI/TabStrip.swift"
+   ]
+  },
+  "Close Tab (\\(ShortcutStore.shared.combos(.closeTab).first?.display ?? ": {
+   "mac": [
+    "UI/TabStrip.swift"
    ]
   },
   "Connect": {
@@ -359,6 +380,11 @@
     "UI/MagicPopover.swift"
    ]
   },
+  "Drag to brighten or darken the \\(title.lowercased()). Double-click to reset.": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
   "Drag to tint \\(title.lowercased()). Double-click to reset.": {
    "mac": [
     "UI/InspectorView.swift"
@@ -377,6 +403,11 @@
   "Duplicate": {
    "mac": [
     "App/EditroomApp.swift"
+   ]
+  },
+  "Dynamic range": {
+   "mac": [
+    "UI/InspectorView.swift"
    ]
   },
   "Each update lists what's new before you install it. Every version's notes are on GitHub.": {
@@ -498,6 +529,26 @@
   "Grade": {
    "mac": [
     "UI/InspectorView.swift"
+   ]
+  },
+  "H.264 can't carry HDR. For an SDR file, set the sequence to SDR.": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "HDR (HLG)": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
+  "HEVC · HDR (HLG)": {
+   "mac": [
+    "UI/ExportSheet.swift"
+   ]
+  },
+  "HEVC · HDR (HLG, 10-bit)": {
+   "mac": [
+    "UI/ExportSheet.swift"
    ]
   },
   "High": {
@@ -689,6 +740,16 @@
     "App/EditroomApp.swift"
    ]
   },
+  "New Tab": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "New Tab (\\(ShortcutStore.shared.combos(.newTab).first?.display ?? ": {
+   "mac": [
+    "UI/TabStrip.swift"
+   ]
+  },
   "No API key needed": {
    "mac": [
     "UI/MagicPopover.swift"
@@ -866,6 +927,11 @@
     "App/EditroomApp.swift"
    ]
   },
+  "SDR (Rec. 709)": {
+   "mac": [
+    "UI/InspectorView.swift"
+   ]
+  },
   "Saturate": {
    "mac": [
     "UI/InspectorView.swift"
@@ -935,6 +1001,16 @@
   "Show Magic at work": {
    "mac": [
     "UI/SettingsView.swift"
+   ]
+  },
+  "Show Next Tab": {
+   "mac": [
+    "App/EditroomApp.swift"
+   ]
+  },
+  "Show Previous Tab": {
+   "mac": [
+    "App/EditroomApp.swift"
    ]
   },
   "Show in Finder": {
@@ -1103,6 +1179,11 @@
     "UI/TimelinePanel.swift"
    ]
   },
+  "Transcription": {
+   "mac": [
+    "UI/SettingsView.swift"
+   ]
+  },
   "Transform": {
    "mac": [
     "UI/InspectorView.swift"
@@ -1259,9 +1340,19 @@
     "Model/EditorModel.swift"
    ]
   },
+  "\\(hidden.count) more tab\\(hidden.count == 1 ? ": {
+   "mac": [
+    "UI/TabStrip.swift"
+   ]
+  },
   "\\(kind.name) is connected": {
    "mac": [
     "UI/MagicPopover.swift"
+   ]
+  },
+  "\\(language) speech can't be transcribed on this Mac yet. You can choose the speech language in Settings › General.": {
+   "mac": [
+    "UI/InspectorView.swift"
    ]
   },
   "\\(n) item\\(n == 1 ? ": {
@@ -1342,11 +1433,6 @@
   "editroom.grab": {
    "mac": [
     "Engine/SourceColor.swift"
-   ]
-  },
-  "editroom.reading": {
-   "mac": [
-    "Engine/ReadGuard.swift"
    ]
   },
   "editroom.reverse": {

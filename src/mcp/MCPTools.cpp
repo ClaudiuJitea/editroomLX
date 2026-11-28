@@ -262,8 +262,11 @@ QJsonObject MCPTools::clipJSON(const Clip& c, const Project& p) {
         QJsonObject gd;
         if (g.look) { gd.insert("look", g.lookLabel()); if (*g.look != g.lookLabel()) gd.insert("look_file", *g.look); }
         if (g.lookIntensity != 1) gd.insert("look_intensity", g.lookIntensity);
+        if (g.off) gd.insert("enabled", false);
         const std::pair<const char*, double> fields[] = {{"exposure", g.exposure}, {"contrast", g.contrast}, {"saturation", g.saturation},
-                                                         {"temperature", g.temperature}, {"tint", g.tint}};
+                                                         {"temperature", g.temperature}, {"tint", g.tint},
+                                                         {"shadows_level", g.shadowsLevel}, {"midtones_level", g.midtonesLevel},
+                                                         {"highlights_level", g.highlightsLevel}};
         for (const auto& [k, v] : fields) if (v != 0) gd.insert(QLatin1String(k), r3(v));
         d.insert("grade", gd);
     }
@@ -291,7 +294,7 @@ QJsonObject MCPTools::projectJSON(const Project& p, const QString& title, double
     QJsonArray markers;
     for (const auto& m : p.markerList()) markers.append(QJsonObject{{"id", uuid(m.id)}, {"time", r3(m.time)}, {"name", m.name}, {"color", tintName(m.tint)}});
     QJsonObject out{{"name", title},
-                    {"sequence", QJsonObject{{"width", p.width}, {"height", p.height}, {"fps", p.fps}, {"duration", r3(p.duration())}}},
+                    {"sequence", QJsonObject{{"width", p.width}, {"height", p.height}, {"fps", p.fps}, {"hdr", p.isHDR()}, {"duration", r3(p.duration())}}},
                     {"playhead", r3(playhead)}, {"tracks", tracks}, {"clips", clips}, {"markers", markers}};
     if (auto r = p.playRange()) out.insert("in_out", QJsonObject{{"in", r3(r->start)}, {"out", r3(r->end)}});
     else out.insert("in_out", QJsonValue::Null);
@@ -721,6 +724,9 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
             return jsonOut(QJsonObject{{"asset_id", uuid(a.id)}, {"status", "unavailable"},
                                        {"note", "Hearing speech needs EditroomLX's speech model, which the person can download in Settings › General › Speech."}});
         auto t = waitTranscript(ctl, path);
+        if (!t && ctl.transcripts().unsupported(path))
+            return jsonOut(QJsonObject{{"asset_id", uuid(a.id)}, {"status", "unsupported_language"},
+                                       {"note", QStringLiteral("%1 speech can't be transcribed on this computer (EditroomLX's speech model doesn't have it). The person can choose the speech language in EditroomLX's Settings › General.").arg(ctl.transcripts().unsupportedLanguage())}});
         if (!t) return jsonOut(QJsonObject{{"asset_id", uuid(a.id)}, {"status", "failed"}, {"note", QStringLiteral("Couldn't hear what's said in %1.").arg(a.name)}});
         return jsonOut(transcriptJSON(*t, a, args.value("words").toBool(false)));
     }
@@ -1011,7 +1017,9 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
                 }
             }
             auto intensity = number(args, "look_intensity"), temp = number(args, "temperature"), tint = number(args, "tint");
-            if (intensity || temp || tint) {
+            auto lows = number(args, "shadows_level"), mids = number(args, "midtones_level"), highs = number(args, "highlights_level");
+            const std::optional<bool> enabled = args.value("enabled").isBool() ? std::optional<bool>(args.value("enabled").toBool()) : std::nullopt;
+            if (intensity || temp || tint || lows || mids || highs || enabled) {
                 edits.push_back(MagicEdit::change(cid, QStringLiteral("Colour"), [=](Project& q) {
                     auto i = q.index(cid);
                     if (!i) return;
@@ -1019,7 +1027,11 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
                     if (intensity) g.lookIntensity = std::clamp(*intensity, 0.0, 1.0);
                     if (temp) g.temperature = std::clamp(*temp, -50.0, 50.0);
                     if (tint) g.tint = std::clamp(*tint, -50.0, 50.0);
-                    q.clips[*i].grade = g;
+                    if (lows) g.shadowsLevel = std::clamp(*lows, -100.0, 100.0);
+                    if (mids) g.midtonesLevel = std::clamp(*mids, -100.0, 100.0);
+                    if (highs) g.highlightsLevel = std::clamp(*highs, -100.0, 100.0);
+                    if (enabled) g.off = !*enabled;
+                    q.clips[*i].grade = g.isNeutral() ? std::nullopt : std::optional<ColorGrade>(g);
                 }));
             }
         }
@@ -1074,18 +1086,21 @@ QJsonArray MCPTools::call(const QString& name, const QJsonObject& args, Controll
         }
         std::optional<double> fps;
         if (auto f = number(args, "fps")) fps = EditorModel::standardFPS(*f);
+        const std::optional<bool> hdr = args.value("hdr").isBool() ? std::optional<bool>(args.value("hdr").toBool()) : std::nullopt;
         if (draft) {
             draft->apply({MagicEdit::change(std::nullopt, QStringLiteral("Sequence"), [=](Project& q) {
                 if (size) { q.width = size->first; q.height = size->second; }
                 if (fps) q.fps = *fps;
+                if (hdr) q.hdr = *hdr ? std::optional<bool>(true) : std::nullopt;
                 q.settingsLocked = true;
             })});
         } else {
             if (size) m.setSequence(size->first, size->second);
             if (fps) m.setFPS(*fps);
+            if (hdr) m.setHDR(*hdr);
         }
         const Project& q = now();
-        return jsonOut(QJsonObject{{"width", q.width}, {"height", q.height}, {"fps", q.fps}});
+        return jsonOut(QJsonObject{{"width", q.width}, {"height", q.height}, {"fps", q.fps}, {"hdr", q.isHDR()}});
     }
     if (n == "playback") {
         if (draft) {

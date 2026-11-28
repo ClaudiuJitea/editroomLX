@@ -44,6 +44,13 @@ public:
     SourcePreview& sourcePreview() { return *sourcePreview_; }
     void setWindow(QWidget* w) { window_ = w; }
 
+    // Tabs (Workspace.swift): only the tab in front plays, rebuilds and talks to the AI apps.
+    /// Sent behind another tab: playback stops and the player lets go of its frames and sound.
+    void suspend();
+    /// Brought to the front again: the settings shared by all tabs are read again and the player is rebuilt.
+    void resume();
+    bool isBackground() const { return background_; }
+
     /// Imports files and folders (EditorModel.importFiles): in the background, one at a time.
     /// `then` gets the assets made, in order, once every file has been looked at (files already in the library
     /// count as theirs).
@@ -118,6 +125,8 @@ private:
     void syncLinkedFolders(std::function<void()> then);
     void showImported(const std::vector<MediaAsset>& assets, const std::vector<MediaFolder>& folders, const std::optional<QString>& opened);
     bool importDropHover_ = false;
+    bool background_ = false;
+    bool rebuildOnWake_ = false;
     bool adoptingReplacements_ = false;
     MediaStore media_;
     std::unique_ptr<SoundStore> sound_;

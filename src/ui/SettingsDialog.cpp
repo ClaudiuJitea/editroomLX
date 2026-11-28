@@ -8,6 +8,7 @@
 #include "editor/EditorModel.h"
 #include "model/Timecode.h"
 #include <QAbstractButton>
+#include <QApplication>
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QGraphicsOpacityEffect>
@@ -340,6 +341,25 @@ QWidget* keyCap(const QString& s) {
     return l;
 }
 
+/// A settings page: its name at the top of what scrolls (the tab above already says where you are), then a column of
+/// its sections, `spacing` apart, in `inner`.
+QWidget* page(const QString& title, int spacing, QVBoxLayout** inner) {
+    auto* content = new QWidget;
+    auto* outer = new QVBoxLayout(content);
+    outer->setContentsMargins(24, 16, 24, 16);
+    outer->setSpacing(0);
+    auto* t = text(title, 20, Theme::text(), 600);
+    t->setContentsMargins(0, 4, 0, 16);
+    outer->addWidget(t);
+    auto* body = new QWidget;
+    *inner = new QVBoxLayout(body);
+    (*inner)->setContentsMargins(0, 0, 0, 0);
+    (*inner)->setSpacing(spacing);
+    outer->addWidget(body);
+    outer->addStretch(1);
+    return content;
+}
+
 QWidget* scrolled(QWidget* content) {
     auto* s = new QScrollArea;
     s->setFrameShape(QFrame::NoFrame);
@@ -386,9 +406,7 @@ SettingsDialog::SettingsDialog(Controller& c, ShortcutStore& keys, QWidget* pare
     th->addStretch(1);
     v->addWidget(tabRow_);
     v->addWidget(divider());
-    title_ = text(QString(), 20, Theme::text(), 600);
-    title_->setContentsMargins(24, 20, 24, 4);
-    v->addWidget(title_);
+    // Each tab is a page: its title is the first thing in it and scrolls away with the rest.
     pages_ = new QStackedWidget;
     pages_->addWidget(general());
     pages_->addWidget(shortcuts());
@@ -410,9 +428,7 @@ void SettingsDialog::showTab(Tab t) {
     tab_ = t;
     recording_.reset();
     static const char* keys[] = {"general", "shortcuts", "magic", "updates"};
-    static const char* names[] = {"General", "Shortcuts", "Magic", "Updates"};
     QSettings().setValue(QStringLiteral("settingsTab"), QLatin1String(keys[int(t)]));
-    title_->setText(QLatin1String(names[int(t)]));
     pages_->setCurrentIndex(int(t));
     for (auto* b : tabRow_->findChildren<QAbstractButton*>()) b->update();
     if (t == Tab::shortcuts) fillShortcuts();
@@ -421,10 +437,8 @@ void SettingsDialog::showTab(Tab t) {
 // MARK: General
 
 QWidget* SettingsDialog::general() {
-    auto* w = new QWidget;
-    auto* v = new QVBoxLayout(w);
-    v->setContentsMargins(22, 14, 22, 22);
-    v->setSpacing(18);
+    QVBoxLayout* v = nullptr;
+    QWidget* w = page(QStringLiteral("General"), 18, &v);
     QVBoxLayout* inner;
     v->addWidget(settingsSection(QStringLiteral("Theme"), &inner));
     {
@@ -533,8 +547,9 @@ QWidget* SettingsDialog::general() {
         connect(&c_.scenes(), &SceneTagStore::modelInstalled, this, refresh);
         connect(&c_, &Controller::importChanged, this, refresh);
     }
-    v->addStretch(1);
-    return w;
+    v->addWidget(settingsSection(QStringLiteral("Transcription"), &inner));
+    inner->addWidget(speechLanguageRow());
+    return scrolled(w);
 }
 
 // MARK: Shortcuts
@@ -544,9 +559,17 @@ QWidget* SettingsDialog::shortcuts() {
     auto* v = new QVBoxLayout(w);
     v->setContentsMargins(0, 0, 0, 0);
     v->setSpacing(0);
+    // The title and the search field scroll with the list; the bar under it stays.
+    auto* scroll = new QWidget;
+    auto* sv = new QVBoxLayout(scroll);
+    sv->setContentsMargins(24, 16, 24, 16);
+    sv->setSpacing(0);
+    auto* title = text(QStringLiteral("Shortcuts"), 20, Theme::text(), 600);
+    title->setContentsMargins(0, 4, 0, 16);
+    sv->addWidget(title);
     auto* searchRow = new QWidget;
     auto* sr = new QHBoxLayout(searchRow);
-    sr->setContentsMargins(24, 12, 24, 4);
+    sr->setContentsMargins(0, 0, 0, 16);
     auto* search = new QLineEdit;
     search->setPlaceholderText(QStringLiteral("Search shortcuts"));
     search->setFont(Theme::font(12.5));
@@ -561,12 +584,14 @@ QWidget* SettingsDialog::shortcuts() {
     glass->move(10, 8);
     connect(search, &QLineEdit::textChanged, this, [this](const QString& s) { shortcutSearch_ = s; fillShortcuts(); });
     sr->addWidget(search);
-    v->addWidget(searchRow);
+    sv->addWidget(searchRow);
     auto* list = new QWidget;
     shortcutList_ = new QVBoxLayout(list);
-    shortcutList_->setContentsMargins(24, 12, 24, 12);
+    shortcutList_->setContentsMargins(0, 0, 0, 0);
     shortcutList_->setSpacing(18);
-    v->addWidget(scrolled(list), 1);
+    sv->addWidget(list);
+    sv->addStretch(1);
+    v->addWidget(scrolled(scroll), 1);
     v->addWidget(divider());
     auto* foot = new QWidget;
     foot->setFixedHeight(52);
@@ -672,14 +697,13 @@ void SettingsDialog::fillShortcuts() {
                 }
             }
             connect(row, &QAbstractButton::clicked, this, [this, a] {
-                if (recording_ == a) recording_.reset(); else recording_ = a;
                 setFocus();
-                fillShortcuts();
+                if (recording_ == a) { recording_.reset(); fillShortcuts(); } else startRecording(a);
             });
             row->setContextMenuPolicy(Qt::CustomContextMenu);
             connect(row, &QWidget::customContextMenuRequested, this, [this, a, row](QPoint at) {
                 QMenu menu(this);
-                menu.addAction(QStringLiteral("Change Shortcut"), this, [this, a] { recording_ = a; setFocus(); fillShortcuts(); });
+                menu.addAction(QStringLiteral("Change Shortcut"), this, [this, a] { setFocus(); startRecording(a); });
                 menu.addAction(QStringLiteral("Remove Shortcut"), this, [this, a] { keys_.clear(a); fillShortcuts(); emit shortcutsChanged(); })
                     ->setEnabled(!keys_.combos(a).empty());
                 QStringList defaults;
@@ -702,11 +726,35 @@ void SettingsDialog::fillShortcuts() {
     restoreDefaults_->setEnabled(anyChanged);
 }
 
+void SettingsDialog::startRecording(ShortcutAction a) {
+    recording_ = a;
+    qApp->removeEventFilter(this);
+    qApp->installEventFilter(this);
+    fillShortcuts();
+}
+
+bool SettingsDialog::eventFilter(QObject* o, QEvent* e) {
+    if (!recording_) { qApp->removeEventFilter(this); return QDialog::eventFilter(o, e); }
+    // Shortcuts (menus, the dialog's own) don't fire while a key is being recorded: it's taken here instead.
+    if (e->type() == QEvent::ShortcutOverride) { e->accept(); return true; }
+    if (e->type() == QEvent::KeyPress) {
+        auto* k = static_cast<QKeyEvent*>(e);
+        if (auto* w = qobject_cast<QWidget*>(o); w && w->window() == this) { record(k); return true; }
+    }
+    return QDialog::eventFilter(o, e);
+}
+
 void SettingsDialog::keyPressEvent(QKeyEvent* e) {
     if (!recording_) return QDialog::keyPressEvent(e);
+    record(e);
+}
+
+void SettingsDialog::record(QKeyEvent* e) {
+    if (!recording_) return;
     if (e->key() == Qt::Key_Shift || e->key() == Qt::Key_Control || e->key() == Qt::Key_Alt || e->key() == Qt::Key_Meta) return;
     const ShortcutAction a = *recording_;
     recording_.reset();
+    qApp->removeEventFilter(this);
     // Escape cancels.
     if (e->key() != Qt::Key_Escape) {
         if (auto combo = KeyCombo::fromKey(e->key(), e->text(), int(e->modifiers()))) {
@@ -724,10 +772,8 @@ void SettingsDialog::keyPressEvent(QKeyEvent* e) {
 // MARK: Magic
 
 QWidget* SettingsDialog::magic() {
-    auto* content = new QWidget;
-    auto* v = new QVBoxLayout(content);
-    v->setContentsMargins(24, 16, 24, 16);
-    v->setSpacing(22);
+    QVBoxLayout* v = nullptr;
+    QWidget* content = page(QStringLiteral("Magic"), 22, &v);
     QSettings s;
     {
         auto* group = new QWidget;
@@ -865,10 +911,8 @@ QWidget* SettingsDialog::magic() {
 // MARK: Updates
 
 QWidget* SettingsDialog::updates() {
-    auto* content = new QWidget;
-    auto* v = new QVBoxLayout(content);
-    v->setContentsMargins(24, 16, 24, 16);
-    v->setSpacing(16);
+    QVBoxLayout* v = nullptr;
+    QWidget* content = page(QStringLiteral("Updates"), 16, &v);
     auto card = [](const QString& title, QVBoxLayout** inner) {
         auto* w = new QWidget;
         w->setObjectName(QStringLiteral("card"));
@@ -914,19 +958,13 @@ QWidget* SettingsDialog::updates() {
     inner->addWidget(automatic);
     auto* check = new PillButton(QStringLiteral("Check for Updates…"));
     inner->addWidget(check, 0, Qt::AlignLeft);
-    auto* status = text(QStringLiteral("Checks the latest release on GitHub."), 11, Theme::textFaint());
-    inner->addWidget(status);
-    connect(check, &QPushButton::clicked, this, [this, check, status] {
+    // As on the Mac, what the check finds is said in an alert; the button waits while it looks.
+    connect(check, &QPushButton::clicked, this, [this, check] {
         check->setEnabled(false);
-        status->setText(QStringLiteral("Checking…"));
         Updates::shared().checkAndTell(this);
     });
-    connect(&Updates::shared(), &Updates::checked, this, [check, status, lastRow, lastText](const Updates::Result& r) {
+    connect(&Updates::shared(), &Updates::checked, this, [check, lastRow, lastText](const Updates::Result&) {
         check->setEnabled(true);
-        status->setText(!r.ok ? QStringLiteral("Couldn't check: %1").arg(r.error)
-                        : r.none ? QStringLiteral("No releases on GitHub yet.")
-                        : r.newer ? QStringLiteral("EditroomLX %1 is available.").arg(r.version)
-                                  : QStringLiteral("You're up to date."));
         if (auto* l = lastRow->findChildren<QLabel*>().value(1)) l->setText(lastText());
     });
     v->addWidget(card(QStringLiteral("Release Notes"), &inner));
@@ -936,6 +974,62 @@ QWidget* SettingsDialog::updates() {
     inner->addWidget(releases, 0, Qt::AlignLeft);
     v->addStretch(1);
     return scrolled(content);
+}
+
+} // namespace er
+
+namespace er {
+
+/// The language what's said in clips is heard in (captions, cutting by what's said, search, AI apps): heard from the
+/// speech itself by default, or one picked here. Languages the speech model can't hear are said, not guessed at.
+QWidget* SettingsDialog::speechLanguageRow() {
+    QLabel* detail = nullptr;
+    auto* pick = new PillButton(QString());
+    QWidget* row = settingsRow(QStringLiteral("Speech language"), &detail, pick);
+    detail->setWordWrap(true);
+    const auto languages = Transcripts::supportedLanguages();
+    auto refresh = [pick, detail, languages] {
+        const QString chosen = Transcripts::chosenLanguage();
+        const QString code = chosen.section(u'_', 0, 0).section(u'-', 0, 0).toLower();
+        QString label = QStringLiteral("Automatic");
+        for (const auto& [c, name] : languages) if (c == code) label = name;
+        if (!chosen.isEmpty() && label == QLatin1String("Automatic")) label = Transcripts::languageName(chosen);
+        pick->setText(label + QStringLiteral("  ⌄"));
+        QStringList lines;
+        lines << (chosen.isEmpty() ? QStringLiteral("Automatic hears which language each clip is in.")
+                                   : QStringLiteral("Captions and search hear speech in this language."));
+        // This computer's other languages that can't be heard, so it's clear before captions are tried.
+        QStringList unavailable;
+        std::set<QString> seen;
+        for (const QString& id : QLocale::system().uiLanguages()) {
+            const QString c = id.section(u'-', 0, 0).section(u'_', 0, 0).toLower();
+            bool known = false;
+            for (const auto& l : languages) if (l.first == c) known = true;
+            if (known || !seen.insert(c).second) continue;
+            unavailable << Transcripts::languageName(c);
+        }
+        if (!unavailable.isEmpty()) lines << QStringLiteral("%1 can't be transcribed on this computer.").arg(unavailable.join(QStringLiteral(", ")));
+        detail->setText(lines.join(u' '));
+    };
+    refresh();
+    connect(pick, &QPushButton::clicked, this, [this, pick, languages, refresh] {
+        QMenu menu(this);
+        auto choose = [this, refresh](const QString& code) {
+            if (code == Transcripts::chosenLanguage()) return;
+            if (code.isEmpty()) QSettings().remove(QLatin1String(Transcripts::languageKey));
+            else QSettings().setValue(QLatin1String(Transcripts::languageKey), code);
+            refresh();
+            c_.transcripts().languageChanged();
+        };
+        menu.addAction(QStringLiteral("Automatic"), this, [choose] { choose(QString()); });
+        menu.addSeparator();
+        for (const auto& [code, name] : languages) {
+            const QString c = code;
+            menu.addAction(name, this, [choose, c] { choose(c); });
+        }
+        menu.exec(pick->mapToGlobal(QPoint(0, pick->height())));
+    });
+    return row;
 }
 
 } // namespace er

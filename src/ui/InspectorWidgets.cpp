@@ -97,6 +97,16 @@ protected:
     void mousePressEvent(QMouseEvent*) override { s_->toggle(); }
     void enterEvent(QEnterEvent*) override { update(); }
     void leaveEvent(QEvent*) override { update(); }
+    void resizeEvent(QResizeEvent*) override { s_->placeAccessory(); }
+public:
+    /// Where the title (and the dot after it) ends.
+    double titleEnd() const {
+        QFont f = Theme::label();
+        f.setLetterSpacing(QFont::AbsoluteSpacing, 1.6);
+        double x = 14 + QFontMetricsF(f).horizontalAdvance(s_->title_.toUpper());
+        if (s_->marked_ && s_->collapsed_) x += 6 + 5;
+        return x;
+    }
 private:
     InspectorSection* s_;
 };
@@ -152,6 +162,19 @@ InspectorSection::InspectorSection(const QString& title, std::optional<Action> a
 }
 
 void InspectorSection::add(QWidget* w) { body_->addWidget(w); }
+
+void InspectorSection::setAccessory(QWidget* w) {
+    accessory_ = w;
+    w->setParent(header_);
+    w->show();
+    placeAccessory();
+}
+
+void InspectorSection::placeAccessory() {
+    if (!accessory_) return;
+    const double x = static_cast<SectionHeader*>(header_)->titleEnd() + 6;
+    accessory_->setGeometry(int(std::round(x)), 0, accessory_->sizeHint().width(), header_->height());
+}
 void InspectorSection::add(QLayout* l) { body_->addLayout(l); }
 
 void InspectorSection::toggle() {
@@ -163,6 +186,7 @@ void InspectorSection::toggle() {
 void InspectorSection::sync() {
     content_->setVisible(!collapsed_);
     if (action_) action_->setVisible(!collapsed_);
+    placeAccessory();
     header_->update();
 }
 
@@ -717,8 +741,22 @@ void FrameSizeFields::commit() {
 
 // MARK: CaptionEye
 
+GradeEye::GradeEye(bool hidden, std::function<void()> action, QWidget* parent) : QAbstractButton(parent), hidden_(hidden) {
+    setFixedSize(18, 16);
+    setCursor(Qt::ArrowCursor);
+    setToolTip(hidden ? QStringLiteral("Turn the grade on") : QStringLiteral("Turn the grade off (kept, but not shown or exported)"));
+    connect(this, &QAbstractButton::clicked, this, [action = std::move(action)] { QTimer::singleShot(0, action); });
+}
+
+void GradeEye::paintEvent(QPaintEvent*) {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const QColor c = hidden_ ? Theme::accent() : hovered(this) ? Theme::textDim() : Theme::textFaint();
+    Symbols::draw(p, hidden_ ? QStringLiteral("eye.slash") : QStringLiteral("eye"), QPointF(9, 8), 10.5, c, 500);
+}
+
 CaptionEye::CaptionEye(bool on, std::function<void()> action, QWidget* parent) : QAbstractButton(parent), on_(on) {
-    setFixedSize(20, 20);
+    setFixedSize(18, 16);
     setToolTip(on ? QStringLiteral("Hide") : QStringLiteral("Show"));
     connect(this, &QAbstractButton::clicked, this, [action = std::move(action)] { action(); });
 }
@@ -727,7 +765,8 @@ void CaptionEye::paintEvent(QPaintEvent*) {
     QPainter p(this);
     QColor c = on_ ? Theme::textDim() : Theme::textFaint();
     if (hovered(this)) c = c.lighter(115);
-    Symbols::draw(p, on_ ? QStringLiteral("eye") : QStringLiteral("eye.slash"), QPointF(10, 10), 9.5, c, 600);
+    // The same size as Grade's eye.
+    Symbols::draw(p, on_ ? QStringLiteral("eye") : QStringLiteral("eye.slash"), QPointF(9, 8), 10.5, c, 500);
 }
 
 // MARK: CaptionTextField
@@ -822,7 +861,8 @@ void CaptionTextField::commit() {
 
 // MARK: Rows
 
-QWidget* labelledRow(const RowIcon& icon, const QString& label, std::initializer_list<QWidget*> right, bool dim, int labelWidth) {
+QWidget* labelledRow(const RowIcon& icon, const QString& label, std::initializer_list<QWidget*> right, bool dim, int labelWidth,
+                     QWidget* afterLabel) {
     auto* row = new QWidget;
     row->setFixedHeight(28);
     auto* h = new QHBoxLayout(row);
@@ -835,7 +875,16 @@ QWidget* labelledRow(const RowIcon& icon, const QString& label, std::initializer
     l->setFont(Theme::font(11.5));
     l->setStyleSheet(QStringLiteral("color: %1; background: transparent;").arg((dim ? Theme::textFaint() : Theme::text()).name()));
     if (labelWidth > 0) l->setFixedWidth(std::max(labelWidth, rowLabelWidth()));
-    h->addWidget(l);
+    if (afterLabel) {
+        // Right after the name, nearer than the row's spacing.
+        auto* pair = new QHBoxLayout;
+        pair->setSpacing(4);
+        pair->addWidget(l);
+        pair->addWidget(afterLabel);
+        h->addLayout(pair);
+    } else {
+        h->addWidget(l);
+    }
     if (labelWidth <= 0) h->addStretch(1);
     for (QWidget* w : right) h->addWidget(w, labelWidth > 0 ? 1 : 0);
     return row;

@@ -208,7 +208,8 @@ QJsonObject enc(const ColorGrade& g) {
     w.opt("look", g.look); w.set("lookIntensity", g.lookIntensity); w.set("exposure", g.exposure);
     w.set("contrast", g.contrast); w.set("saturation", g.saturation); w.set("temperature", g.temperature);
     w.set("tint", g.tint); w.set("shadows", enc(g.shadows)); w.set("midtones", enc(g.midtones));
-    w.set("highlights", enc(g.highlights));
+    w.set("highlights", enc(g.highlights)); w.set("shadowsLevel", g.shadowsLevel); w.set("midtonesLevel", g.midtonesLevel);
+    w.set("highlightsLevel", g.highlightsLevel); w.set("off", g.off);
     return w.done();
 }
 ColorGrade decGrade(const QJsonValue& v, const QString& path) {
@@ -220,6 +221,9 @@ ColorGrade decGrade(const QJsonValue& v, const QString& path) {
     if (r.has("shadows")) g.shadows = decWheel(r.get("shadows"), r.at("shadows"));
     if (r.has("midtones")) g.midtones = decWheel(r.get("midtones"), r.at("midtones"));
     if (r.has("highlights")) g.highlights = decWheel(r.get("highlights"), r.at("highlights"));
+    // Read field by field, each left at its default when a project doesn't have it (saved before it existed).
+    g.shadowsLevel = r.num("shadowsLevel", 0); g.midtonesLevel = r.num("midtonesLevel", 0);
+    g.highlightsLevel = r.num("highlightsLevel", 0); g.off = r.boolean("off", false);
     g.extra = r.extras();
     return g;
 }
@@ -457,7 +461,8 @@ template <class T, class F> std::vector<T> decList(Reader& r, const char* key, F
 
 QJsonObject encProject(const Project& p) {
     Writer w(p.extra);
-    w.set("width", p.width); w.set("height", p.height); w.set("fps", p.fps); w.set("settingsLocked", p.settingsLocked);
+    w.set("width", p.width); w.set("height", p.height); w.set("fps", p.fps); w.opt("hdr", p.hdr);
+    w.set("settingsLocked", p.settingsLocked);
     w.set("videoTracks", encList(p.videoTracks, [](const Track& t) { return enc(t); }));
     w.set("audioTracks", encList(p.audioTracks, [](const Track& t) { return enc(t); }));
     w.set("clips", encList(p.clips, [](const Clip& c) { return enc(c); }));
@@ -495,6 +500,7 @@ Project decProject(const QJsonValue& v, const QString& path) {
     Reader r(v, path);
     Project p;
     p.width = r.integer("width", 1920); p.height = r.integer("height", 1080); p.fps = r.num("fps", 30);
+    if (r.has("hdr")) p.hdr = r.boolean("hdr", false);
     p.settingsLocked = r.boolean("settingsLocked", false);
     if (r.has("videoTracks")) p.videoTracks = decList<Track>(r, "videoTracks", decTrack);
     if (r.has("audioTracks")) p.audioTracks = decList<Track>(r, "audioTracks", decTrack);
@@ -599,6 +605,11 @@ QJsonObject encode(const Transcript& t) {
     o.insert(QStringLiteral("words"), words);
     o.insert(QStringLiteral("language"), t.language);
     return o;
+}
+
+QJsonObject encode(const ColorGrade& g) { return enc(g); }
+ColorGrade decodeGrade(const QJsonObject& o) {
+    try { return decGrade(o, QStringLiteral("grade")); } catch (const DecodeError&) { return ColorGrade(); }
 }
 
 std::optional<Transcript> decodeTranscript(const QJsonObject& o) {

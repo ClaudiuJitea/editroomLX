@@ -18,6 +18,9 @@ struct WriterSettings {
         bool hevc = false;
         long long bitrate = 0;
         int gop = 60;
+        /// An HDR project: 10-bit HEVC (Main 10) tagged BT.2020 / HLG, as an iPhone records it (H.264 can't carry
+        /// HDR). Frames come as P010.
+        bool hdr = false;
     };
     struct Audio {
         bool wav = false;   // PCM s24le instead of AAC
@@ -33,6 +36,9 @@ public:
     ~MediaWriter();
     /// One frame, NV12 (BT.709 limited range), frames in order from 0.
     bool writeVideo(const uint8_t* nv12, long long frameIndex);
+    /// One frame of an HDR export: P010 (BT.2020 limited range, HLG), the 10-bit values in the top of each 16-bit word.
+    bool writeVideo10(const uint16_t* p010, long long frameIndex);
+    bool isHDR() const;
     /// Interleaved stereo float at 48 kHz, in order.
     bool writeAudio(const float* stereo, int frames);
     bool finish();

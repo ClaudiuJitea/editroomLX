@@ -226,6 +226,15 @@ ER_INLINE vec4 er_apply_cube(vec4 c, int base, int n) {
     return vec4(o * c.w, c.w);
 }
 
+/// The grade in an HDR project: worked on the HLG signal, which runs 0…1 like the cube (highlights above standard
+/// white included), then back.
+ER_INLINE vec4 er_apply_grade(vec4 c, int base, int hdr) {
+    if (hdr == ER_HDR_OFF || base < 0 || c.w <= 0.0) return er_apply_cube(c, base, 32);
+    vec4 h = vec4(er_linear_to_hlg(er_unpremultiply(c)) * c.w, c.w);
+    h = er_apply_cube(h, base, 32);
+    return vec4(er_hlg_to_linear(er_unpremultiply(h)) * c.w, c.w);
+}
+
 /// One layer's premultiplied colour at canvas point P, opacity included.
 ER_INLINE vec4 er_layer_color(ErLayer L, vec2 P, ErFrame F) {
     float W = float(F.canvasW);
@@ -248,10 +257,13 @@ ER_INLINE vec4 er_layer_color(ErLayer L, vec2 P, ErFrame F) {
         vec2 sp = vec2((q.x - L.fitX) / L.fitScale, (q.y - L.fitY) / L.fitScale);
         // Video drawn bigger than its own pixels, on export: enlarged with detail rebuilt rather than stretched.
         c = L.upscale != 0 ? er_sample_easu(s, sp) : er_sample(s, sp);
-        // HDR and Log to Rec.709, after scaling (SourceColor.toRec709).
+        // HDR and Log to Rec.709, after scaling (SourceColor.toRec709). An HDR project's HDR clips have none: they
+        // stay HLG (PQ made HLG).
         c = er_apply_cube(c, L.colorCube, 64);
     }
-    c = er_apply_cube(c, L.gradeCube, 32);
+    // An HDR project: what the layer's values mean, into the working space (SDR at standard white).
+    if (F.hdr != ER_HDR_OFF) c = er_to_working(c, L.transfer);
+    c = er_apply_grade(c, L.gradeCube, F.hdr);
     return c * L.opacity;
 }
 
@@ -296,7 +308,13 @@ ER_INLINE vec4 er_output_pixel(int x, int y) {
         ErSource s = er_source(L.source);
         int u = x - L.pixX;
         int v = y - L.pixY;
-        if (u >= 0 && v >= 0 && u < s.width && v < s.height) c = er_over(er_texel(s, u, v) * L.opacity, c);
+        if (u >= 0 && v >= 0 && u < s.width && v < s.height) {
+            vec4 t = er_texel(s, u, v);
+            if (F.hdr != ER_HDR_OFF) t = er_to_working(t, ER_TF_SRGB);
+            c = er_over(t * L.opacity, c);
+        }
     }
+    // An HDR project: written as HLG, or shown as Rec.709 on a screen without HDR.
+    if (F.hdr != ER_HDR_OFF) c = er_from_working(c, F.hdr);
     return c;
 }

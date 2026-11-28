@@ -89,6 +89,8 @@ public:
     void setSticky(bool on);
     bool loop() const { return loop_; }
     void setLoop(bool on);
+    /// Brought to the front again (tabs): the view settings every tab shares are read again.
+    void reloadSharedSettings();
 
     /// Only the viewer is shown, full screen (F; Esc leaves).
     bool viewerOnly() const { return viewerOnly_; }
@@ -244,7 +246,19 @@ public:
     void closeAllGaps(const std::optional<std::vector<Uuid>>& tracks = std::nullopt);
 
     // Copy, paste, grade
-    const std::vector<Clip>& clipboard() const { return clipboard_; }
+    /// Copied clips, shared by every open project so they can be pasted into another tab.
+    struct Clipboard {
+        /// Times measured from the earliest of them.
+        std::vector<Clip> clips;
+        /// The media they play, so a project that hasn't got it can add it.
+        std::vector<MediaAsset> assets;
+        /// Each clip's track by its place (V1 is 0), for pasting into another project.
+        std::map<Uuid, size_t> trackIndex;
+        /// The project they came from (its editor's serial), where tracks are matched by id.
+        quint64 source = 0;
+    };
+    static Clipboard& sharedClipboard();
+    const std::vector<Clip>& clipboard() const { return sharedClipboard().clips; }
     void copySelection();
     void cutSelection();
     void paste();
@@ -276,6 +290,8 @@ public:
     bool sequenceMatches(const MediaAsset& a) const;
     void matchSequence(const MediaAsset& a);
     void setFPS(double fps);
+    /// The sequence in HDR (HLG) or SDR (Rec.709), an undoable edit.
+    void setHDR(bool on);
     void setExportTarget(const QString& name, const QString& directory);
     void addMagicPrompt(const QString& text, const QString& tab);
     const std::vector<MagicHistoryEntry>& magicHistory() const;
@@ -298,8 +314,35 @@ public:
     void openRecent(const QString& path);
     void clearRecents();
 
+    // Tabs (Workspace.swift): each tab's project keeps its own recovery copy and what it reopens, under its slot.
+    /// Which tab this is, for what it keeps between launches. The first tab's is empty, so a project from before
+    /// tabs reopens in it.
+    const QString& slot() const { return slot_; }
+    void setSlot(const QString& s) { slot_ = s; }
+    /// A tab's own name for a setting it keeps between launches.
+    static QString slotKey(const QString& slot, const QString& key) { return slot.isEmpty() ? key : key + u'.' + slot; }
+    /// What a tab reopens at launch (a project file's path, or "untitled"), read before it's loaded.
+    static std::optional<QString> savedSession(const QString& slot);
+    static std::optional<QString> savedRecoveryFor(const QString& slot);
+    /// The project file open in this tab (none for untitled work).
+    QString openPath() const { return fileUrl_; }
+    /// Nothing in it: opening something can use this tab rather than a new one.
+    bool isBlank() const;
+    /// The project is closed, leaving an empty Untitled one in its place (Ctrl+W on the only tab). Unsaved work asks
+    /// first, as closing a tab does; false if that's cancelled.
+    bool closeProject();
+    /// The tab is closed for good: what it kept for next time goes.
+    void forgetSlot();
+    /// The window's tabs: File › New, Open…, Open Recent and project files dropped here open in a tab of their own
+    /// (or come to the front if already open). Unset (tests, headless), they open in this project.
+    static std::function<void()>& newTabHandler();
+    static std::function<void(const QString&)>& openHandler();
+
     // Autosave and recovery
-    static QString recoveryPath();
+    /// Unsaved work on an untitled project is kept here, and reopened on the next launch (one for each tab). Test
+    /// launches keep theirs apart, so they never touch a real tab's.
+    QString recoveryPath() const;
+    static QString recoveryPath(const QString& slot, bool test = false);
     static constexpr const char* autosaveKey = "autosave";
     static bool autosaves();
     void autosaveNow();
@@ -381,7 +424,8 @@ private:
     QString fileUrl_;
     bool isDirty_ = false;
     std::optional<Project> lastRecovered_;
-    std::vector<Clip> clipboard_;
+    QString slot_;
+    quint64 serial_ = 0;
     /// A grade copied from a clip; the inner nullopt means the clip had no grade, so pasting clears grades.
     std::optional<std::optional<ColorGrade>> copiedGrade_;
     std::set<Uuid> importingFolders_;

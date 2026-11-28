@@ -92,6 +92,9 @@ struct RenderPlan {
     uint64_t signature = 0;
     /// Video drawn bigger than its own pixels is enlarged with the upscaler (on export), not just stretched.
     bool upscale = false;
+    /// An HDR project: put together in HDR (HLG, Rec.2020), SDR at standard white within it (ER_HDR_*). The export
+    /// writes HLG; the viewer, thumbnails and AI snapshots show it as SDR.
+    int hdr = 0;
 
     bool isEmpty() const { return duration <= 0; }
 };
@@ -104,6 +107,8 @@ struct BuildOptions {
     bool keepAllTracks = false;
     /// Export: video drawn bigger than its pixels (a 1080p sequence at 4K) is upscaled, not stretched.
     bool upscale = false;
+    /// An HDR project's frames: as HLG (the export), or as SDR for a screen (everything else). SDR projects ignore it.
+    bool hdrOutput = false;
 };
 
 namespace CompositionBuilder {

@@ -56,16 +56,20 @@ void drawLabel(QPainter& p, const QString& text, QPointF centre) {
 
 // MARK: ColorWheel
 
-ColorWheel::ColorWheel(const QString& title, WheelPoint point, std::function<void(WheelPoint)> onChange, std::function<void()> onEnd,
-                       QWidget* parent)
-    : QWidget(parent), title_(title), point_(std::move(point)), onChange_(std::move(onChange)), onEnd_(std::move(onEnd)) {
-    setFixedHeight(size + 7 + 16);
+ColorWheel::ColorWheel(const QString& title, WheelPoint point, double level, std::function<void(WheelPoint)> onChange,
+                       std::function<void(double)> onLevel, std::function<void()> onEnd, QWidget* parent)
+    : QWidget(parent), title_(title), point_(std::move(point)), level_(level), onLevel_(std::move(onLevel)),
+      onChange_(std::move(onChange)), onEnd_(std::move(onEnd)) {
+    // The wheel, 4, the hairline (3 above it, 14 tall), 4, the name.
+    setFixedHeight(size + 4 + 3 + 14 + 4 + 16);
     setMinimumWidth(size);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMouseTracking(true);
     setToolTip(QStringLiteral("Drag to tint %1. Double-click to reset.").arg(title.toLower()));
 }
 
 QRectF ColorWheel::wheel() const { return QRectF((width() - size) / 2.0, 0, size, size); }
+QRectF ColorWheel::line() const { return QRectF((width() - lineWidth) / 2.0, size + 4 + 3, lineWidth, 14); }
 
 void ColorWheel::paintEvent(QPaintEvent*) {
     QPainter p(this);
@@ -74,7 +78,7 @@ void ColorWheel::paintEvent(QPaintEvent*) {
     const QPointF c = r.center();
     const double s = size;
     const bool active = point_.x != 0 || point_.y != 0;
-    const bool lit = underMouse() || dragging_;
+    const bool lit = (underMouse() && !lineHover_ && !levelDragging_) || dragging_;
     p.setPen(Qt::NoPen);
     p.setBrush(Theme::field());
     p.drawEllipse(r);
@@ -96,20 +100,76 @@ void ColorWheel::paintEvent(QPaintEvent*) {
     p.setBrush(active ? Theme::accent() : QColor(Qt::white));
     p.setPen(QPen(QColor(0, 0, 0, 128), 1));
     p.drawEllipse(puck, pr - 0.5, pr - 0.5);
-    p.setFont(Theme::font(11.5));
-    p.setPen(active ? Theme::text() : Theme::textDim());
-    p.drawText(QRectF(0, s + 7, width(), 16), Qt::AlignHCenter | Qt::AlignTop, title_);
+
+    // The range's brightness on a hairline, zero marked in the middle.
+    const QRectF L = line();
+    const double w = L.width(), mid = L.left() + w / 2, cy = L.center().y();
+    const double x = mid + level_ / 100 * w / 2;
+    p.setPen(Qt::NoPen);
+    p.fillRect(QRectF(L.left(), cy - 0.5, w, 1), Theme::ink(0.14));
+    p.fillRect(QRectF(mid - 0.5, cy - 3, 1, 6), Theme::ink(0.3));
+    QColor fill = Theme::text();
+    fill.setAlphaF(0.75);
+    p.setBrush(fill);
+    p.drawRoundedRect(QRectF(std::min(x, mid), cy - 1, std::abs(x - mid), 2), 1, 1);
+    p.setBrush(Theme::text());
+    const double kr = (levelDragging_ || lineHover_ ? 1.2 : 1.0) * 4;
+    p.drawEllipse(QPointF(x, cy), kr, kr);
+
+    // The name, with the level beside it once it's moved (and while it's dragged), in its own fixed width wide
+    // enough for "-100": the name moves once when it appears, and stays put as the digits change.
+    const QFont nameFont = Theme::font(11.5);
+    const bool shows = level_ != 0 || levelDragging_;
+    const double nameW = QFontMetricsF(nameFont).horizontalAdvance(title_);
+    const double total = nameW + (shows ? 4 + 27 : 0);
+    const double nx = (width() - total) / 2, ny = L.bottom() + 4;
+    p.setFont(nameFont);
+    p.setPen(active || level_ != 0 ? Theme::text() : Theme::textDim());
+    p.drawText(QRectF(nx, ny, nameW + 1, 16), Qt::AlignLeft | Qt::AlignTop, title_);
+    if (shows) {
+        const int v = int(level_);
+        const QString num = v == 0 ? QStringLiteral("0") : (v > 0 ? QStringLiteral("+") : QString()) + QString::number(v);
+        p.setFont(Theme::mono(10.5));
+        p.setPen(Theme::textDim());
+        p.drawText(QRectF(nx + nameW + 4, ny, 27, 16), Qt::AlignLeft | Qt::AlignVCenter, num);
+    }
+}
+
+void ColorWheel::dragLevel(double px) {
+    const QRectF L = line();
+    double value = ((px - L.left()) / L.width() * 2 - 1) * 100;
+    value = std::round(std::clamp(value, -100.0, 100.0));
+    // A small dead zone makes it easy to land exactly on zero.
+    if (std::abs(value) < 3) value = 0;
+    level_ = value;
+    update();
+    onLevel_(value);
 }
 
 void ColorWheel::mousePressEvent(QMouseEvent* e) {
+    if (e->button() != Qt::LeftButton) return;
+    // The brightness hairline: set where it's pressed, then dragged.
+    if (line().adjusted(-4, 0, 4, 0).contains(e->position())) {
+        levelDragging_ = true;
+        dragLevel(e->position().x());
+        return;
+    }
     // Only on the wheel itself (its content shape is the circle).
     const QRectF r = wheel();
-    if (e->button() != Qt::LeftButton || QLineF(e->position(), r.center()).length() > size / 2.0) return;
+    if (QLineF(e->position(), r.center()).length() > size / 2.0) return;
     pressAt_ = e->position();
     moved_ = false;
 }
 
 void ColorWheel::mouseMoveEvent(QMouseEvent* e) {
+    if (levelDragging_) { dragLevel(e->position().x()); return; }
+    const bool overLine = line().adjusted(-4, 0, 4, 0).contains(e->position());
+    if (overLine != lineHover_) {
+        lineHover_ = overLine;
+        setToolTip(overLine ? QStringLiteral("Drag to brighten or darken the %1. Double-click to reset.").arg(title_.toLower())
+                            : QStringLiteral("Drag to tint %1. Double-click to reset.").arg(title_.toLower()));
+        update();
+    }
     if (!(e->buttons() & Qt::LeftButton) || pressAt_.isNull()) return;
     // A drag starts after 2 px.
     if (!moved_ && QLineF(e->position(), pressAt_).length() < 2) return;
@@ -131,6 +191,12 @@ void ColorWheel::mouseMoveEvent(QMouseEvent* e) {
 
 void ColorWheel::mouseReleaseEvent(QMouseEvent*) {
     pressAt_ = QPointF();
+    if (levelDragging_) {
+        levelDragging_ = false;
+        update();
+        onEnd_();
+        return;
+    }
     if (!dragging_) return;
     dragging_ = false;
     update();
@@ -138,6 +204,14 @@ void ColorWheel::mouseReleaseEvent(QMouseEvent*) {
 }
 
 void ColorWheel::mouseDoubleClickEvent(QMouseEvent* e) {
+    if (line().adjusted(-4, 0, 4, 0).contains(e->position())) {
+        levelDragging_ = false;
+        level_ = 0;
+        update();
+        onLevel_(0);
+        onEnd_();
+        return;
+    }
     if (QLineF(e->position(), wheel().center()).length() > size / 2.0) return;
     point_ = WheelPoint();
     update();

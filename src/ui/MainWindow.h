@@ -1,8 +1,9 @@
-// ContentView.swift + EditroomApp.swift: the editor window. A 38 px title strip (title and dirty dot, the
+// ContentView.swift + EditroomApp.swift: the editor window. A 38 px title strip (the project tabs, the
 // export pill, Magic, Export), then Media (252 px, 190–440) | viewer | inspector (320 px) over the timeline
 // (360 px, resizable), with the Mac's menus (File, Edit, Clip, Mark, View, Help) and shortcuts.
 #pragma once
 #include "Controller.h"
+#include "Workspace.h"
 #include "model/Shortcuts.h"
 #include <QMainWindow>
 
@@ -19,14 +20,20 @@ class TimelinePanel;
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(Controller& c, QWidget* parent = nullptr);
+    explicit MainWindow(Workspace& w, QWidget* parent = nullptr);
     ShortcutStore& keys() { return keys_; }
+    Workspace& workspace() { return w_; }
+    /// The tab in front's editor.
+    Controller& controller() { return *c_; }
+    TimelinePanel* timeline() const { return timeline_; }
     void rebuildMenus();
     void applyTheme();
 
 signals:
     /// The Magic button (the Magic panel lives with the MCP server and agents).
     void magicRequested();
+    /// Another tab came to the front: its editor is the one the menus, Magic and the AI apps act on.
+    void controllerChanged(Controller& c);
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -37,6 +44,9 @@ protected:
     bool eventFilter(QObject* o, QEvent* e) override;
 
 private:
+    /// The tab in front's panels, made again when another tab comes to the front (the title strip stays).
+    void buildEditor();
+    void tearDownEditor();
     bool runShortcut(QKeyEvent* e, bool inTextField);
     void perform(ShortcutAction a);
     void refreshTitle();
@@ -49,9 +59,11 @@ private:
     void showExport();
     void showSettings();
     void showAbout();
-    Controller& c_;
+    Workspace& w_;
+    Controller* c_ = nullptr;
     ShortcutStore keys_;
-    QLabel* title_ = nullptr;
+    QWidget* editor_ = nullptr;
+    QWidget* tabs_ = nullptr;
     QLabel* exportPill_ = nullptr;
     LibraryPanel* library_ = nullptr;
     PreviewPanel* preview_ = nullptr;

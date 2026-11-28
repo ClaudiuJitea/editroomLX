@@ -58,7 +58,10 @@ Controller::Controller(QObject* parent) : QObject(parent) {
     };
     // Coming back to the front: files added to linked folders come in.
     if (auto* app = qobject_cast<QGuiApplication*>(QCoreApplication::instance()))
-        connect(app, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState s) { if (s == Qt::ApplicationActive) syncFolders(); });
+        connect(app, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState s) {
+            // A tab behind catches up when it's brought to the front.
+            if (s == Qt::ApplicationActive && !background_) syncFolders();
+        });
     tick_.start();
 }
 
@@ -68,7 +71,34 @@ Controller::~Controller() {
     QCoreApplication::removePostedEvents(this);
 }
 
+void Controller::suspend() {
+    if (background_) return;
+    EditorModel& m = *model_;
+    if (m.isPlaying()) m.pause();
+    m.commitLive();
+    m.skim(std::nullopt);
+    sourcePreview_->clear();
+    background_ = true;
+    rebuildOnWake_ = true;
+    engine_->unload();
+    scrubber_.shutDown();
+    tick_.stop();
+}
+
+void Controller::resume() {
+    model_->reloadSharedSettings();
+    if (!background_) return;
+    background_ = false;
+    tick_.start();
+    if (model_->audioScrub()) scrubber_.warmUp();
+    if (rebuildOnWake_) { rebuildOnWake_ = false; model_->setNeedsRebuild(); }
+    // What changed while it was behind: files saved over elsewhere, files added to linked folders.
+    syncFolders();
+}
+
 void Controller::rebuild(const Project& p, double playhead) {
+    // A tab behind doesn't play or rebuild; it catches up when it's brought to the front.
+    if (background_) { rebuildOnWake_ = true; return; }
     sound_->warm(p.assets);
     engine_->rebuild(p, playhead);
     makeScrubFrames(p);

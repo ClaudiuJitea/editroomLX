@@ -1,6 +1,8 @@
 #version 450
-// Float RGBA (from rendering.comp) to NV12, BT.709 limited range: the encoder's input, read back once.
-// Each invocation writes one 32-bit word: four Y samples, or two CbCr pairs (each the 2×2 average).
+// Float RGBA (from rendering.comp) to the encoder's input, read back once: NV12, BT.709 limited range (mode 0), or for
+// an HDR project's export P010, BT.2020 limited range, 10 bits in the top of each 16-bit sample (mode 1).
+// NV12: each invocation writes one 32-bit word, four Y samples or two CbCr pairs (each the 2×2 average).
+// P010: each invocation writes one word, two 16-bit samples of the Y plane then the interleaved CbCr plane.
 #extension GL_GOOGLE_include_directive : require
 
 layout(local_size_x = 64) in;
@@ -22,7 +24,37 @@ vec3 rgbAt(int x, int y) {
 
 int code(float v) { return clamp(int(floor(v + 0.5)), 0, 255); }
 
+/// One 16-bit sample of the P010 frame, by its index: the Y plane, then Cb, Cr pairs (the 2×2 average).
+uint p010Sample(int idx, int w, int h, int cw, int ch) {
+    if (idx < w * h) {
+        float y = er_rgb_to_yuv2020(rgbAt(idx % w, idx / w), 1023.0).x;
+        return uint(clamp(int(floor(y + 0.5)), 0, 1023)) << 6u;
+    }
+    int e = idx - w * h;
+    int n = e / 2;
+    if (n >= cw * ch) return 0u;
+    int x = (n % cw) * 2;
+    int y = (n / cw) * 2;
+    vec3 sum = rgbAt(x, y) + rgbAt(x + 1, y) + rgbAt(x, y + 1) + rgbAt(x + 1, y + 1);
+    vec3 yuv = er_rgb_to_yuv2020(sum / 4.0, 1023.0);
+    float v = (e % 2) == 0 ? yuv.y : yuv.z;
+    return uint(clamp(int(floor(v + 0.5)), 0, 1023)) << 6u;
+}
+
 void main() {
+    if (pc.mode == 1) {
+        int w = frameData.outW;
+        int h = frameData.outH;
+        int cw = (w + 1) / 2;
+        int ch = (h + 1) / 2;
+        int samples = w * h + cw * ch * 2;
+        int i = int(gl_GlobalInvocationID.x);
+        if (i * 2 >= samples) return;
+        uint lo = p010Sample(i * 2, w, h, cw, ch);
+        uint hi = i * 2 + 1 < samples ? p010Sample(i * 2 + 1, w, h, cw, ch) : 0u;
+        outWords[i] = lo | (hi << 16u);
+        return;
+    }
     int w = frameData.outW;
     int h = frameData.outH;
     int lumaWords = (w * h + 3) / 4;

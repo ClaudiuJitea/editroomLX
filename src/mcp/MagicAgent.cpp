@@ -1,4 +1,5 @@
 #include "MagicAgent.h"
+#include "model/MediaFolders.h"
 #include <QRegularExpression>
 #include <QPointer>
 #include <QTimer>
@@ -117,7 +118,8 @@ QString MagicAgent::brief(const QString& request, const Project& p, const std::o
 std::optional<QString> MagicAgent::pointing(const MagicPointers& ptr, const QString& request, const Project& p) {
     const auto labels = MagicMention::clipLabels(p);
     const auto marks = MagicMention::markerLabels(p);
-    const auto mentions = MagicMention::find(request, p.assets, labels, marks);
+    const auto folders = MagicMention::folderLabels(p);
+    const auto mentions = MagicMention::find(request, p.assets, labels, marks, folders);
     if (p.clips.empty() && mentions.empty()) return std::nullopt;
     auto t = [](double s) { return QString::number(s, 'f', 2) + u's'; };
     auto track = [&](const Clip& c) {
@@ -173,6 +175,60 @@ std::optional<QString> MagicAgent::pointing(const MagicPointers& ptr, const QStr
             for (const auto& l : marks)
                 if (l.id == f.mention.id) meant << QStringLiteral("@%1 (or @marker:%1) means the marker \"%1\" at %2 on the timeline.").arg(l.name, t(l.time));
             break;
+        case MagicMention::Kind::folder: {
+            const MagicMention::FolderLabel* fl = nullptr;
+            for (const auto& x : folders) if (x.path == f.mention.path) fl = &x;
+            if (!fl) break;
+            auto named = [&](const std::vector<Uuid>& ids) {
+                std::vector<const MediaAsset*> out;
+                for (const Uuid& id : ids) if (const MediaAsset* a = p.asset(id)) out.push_back(a);
+                return out;
+            };
+            auto asText = [](const MediaAsset* a) { return QStringLiteral("%1 (asset_id %2)").arg(a->name, a->id.toString(QUuid::WithoutBraces).toUpper()); };
+            const bool only = f.mention.only;
+            if ((only || MagicMention::onlyDirect(request)) && !fl->direct.empty()) {
+                // They asked for just what's directly in it: said outright, so "all" can't be read as the sub-folders too.
+                const auto files = named(fl->direct);
+                const int skipped = int(fl->files.size() - files.size());
+                QStringList shown;
+                for (size_t i = 0; i < files.size() && i < 60; ++i) shown << asText(files[i]);
+                const int n = int(files.size());
+                meant << QStringLiteral("@folder:%1%2 means ONLY the %3 library file%4 directly in the Media folder \"%5\": ")
+                             .arg(fl->name, only ? QStringLiteral(":only") : QString()).arg(n).arg(n == 1 ? QString() : QStringLiteral("s"), fl->label)
+                         + shown.join(QStringLiteral(", "))
+                         + (n > 60 ? QStringLiteral(", and %1 more (list_media gives each file's folder)").arg(n - 60) : QString())
+                         + QStringLiteral(". %1 the folders inside it, so don't use any of the %2 file%3 in its sub-folders. ")
+                               .arg(only ? QStringLiteral("That leaves out") : QStringLiteral("They asked to leave out")).arg(skipped).arg(skipped == 1 ? QString() : QStringLiteral("s"))
+                         + QStringLiteral("\"All\" in their request means all of these files: every one goes in the edit, even if only briefly.");
+            } else {
+                // Its files by where they are: directly in it, then each folder inside it, so "only this folder" or "skip
+                // the B-roll folder" can be done.
+                const MediaTree tree(p);
+                const auto files = named(fl->files);
+                std::vector<std::pair<QString, std::vector<const MediaAsset*>>> groups;
+                for (const MediaAsset* a : files) {
+                    const QString at = tree.folderOf(*a).value_or(fl->path);
+                    const QString name = at == fl->path ? QStringLiteral("Directly in \"%1\"").arg(fl->label) : QStringLiteral("In \"%1\"").arg(tree.label(at));
+                    auto g = std::find_if(groups.begin(), groups.end(), [&](const auto& x) { return x.first == name; });
+                    if (g == groups.end()) groups.push_back({name, {a}}); else g->second.push_back(a);
+                }
+                int left = 60;
+                QStringList listed;
+                for (const auto& [name, list] : groups) {
+                    QStringList shown;
+                    for (size_t i = 0; i < list.size() && int(i) < std::max(0, left); ++i) shown << asText(list[i]);
+                    left -= int(shown.size());
+                    const int rest = int(list.size()) - int(shown.size());
+                    const QString more = rest > 0 ? (shown.isEmpty() ? QString() : QStringLiteral(", ")) + QStringLiteral("and %1 more").arg(rest) : QString();
+                    listed << name + QStringLiteral(": ") + shown.join(QStringLiteral(", ")) + more + u'.';
+                }
+                const int n = int(files.size());
+                const QString note = n > 60 ? QStringLiteral(" (list_media gives each file's folder)") : QString();
+                meant << QStringLiteral("@folder:%1 means the %2 library file%3 in the Media folder \"%4\" and the folders inside it%5. %6 Use all of them unless they ask otherwise: for example only the files directly in the folder (not the folders inside it), or leaving a folder out. If they ask for all of them, every one of those files goes in the edit, even if only briefly.")
+                             .arg(fl->name).arg(n).arg(n == 1 ? QString() : QStringLiteral("s"), fl->label, note, listed.join(u' '));
+            }
+            break;
+        }
         }
     }
     QString out;
@@ -208,7 +264,7 @@ std::optional<QString> MagicAgent::pointing(const MagicPointers& ptr, const QStr
     return out.trimmed();
 }
 
-MagicAgent::MagicAgent(Controller& c, MCPServer& server, QObject* parent) : QObject(parent), c_(c), server_(server) {
+MagicAgent::MagicAgent(Controller& c, MCPServer& server, QObject* parent) : QObject(parent), c_(&c), server_(server) {
     connect(&server_, &MCPServer::toolCalled, this, [this](const QString& tool, const QString& token) {
         if (draft_ && token == draft_->token) {
             status_ = name(kind_) + QStringLiteral(" is ") + doing(tool);
@@ -252,16 +308,16 @@ void MagicAgent::start(const QString& request, Kind k) {
         return;
     }
     // Nothing plays while the AI works out the edit.
-    c_.model().pause();
-    MagicThinking::begin(c_, name(k), MagicShow::color(name(k)));
+    c_->model().pause();
+    MagicThinking::begin(*c_, name(k), MagicShow::color(name(k)));
     kind_ = k;
     stopped_ = false;
     lastMessage_.clear();
     failure_.clear();
     pending_.clear();
     errors_.clear();
-    draft_ = MCPDraft::open(c_.model().project());
-    draft_->playhead = c_.model().playhead();
+    draft_ = MCPDraft::open(c_->model().project());
+    draft_->playhead = c_->model().playhead();
     const QString url = server_.endpoint() + QStringLiteral("?draft=") + draft_->token;
     // An empty folder of its own, so the AI reads no project's settings or notes.
     const QString folder = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Editroom/Magic");
@@ -306,7 +362,7 @@ void MagicAgent::start(const QString& request, Kind k) {
         if (e == QProcess::FailedToStart) { failure_ = QStringLiteral("Couldn't start %1.").arg(name(kind_)); done(-1); }
     });
     process_->start();
-    process_->write(brief(request, c_.model().project(), MagicPointers::now(c_.model())).toUtf8());
+    process_->write(brief(request, c_->model().project(), MagicPointers::now(c_->model())).toUtf8());
     process_->closeWriteChannel();
     status_ = name(k) + QStringLiteral(" is thinking");
     emit statusChanged(status_);
@@ -358,13 +414,13 @@ void MagicAgent::done(int code) {
     if (edits.empty()) return emit finished(lastMessage_.isEmpty() ? QStringLiteral("%1 didn't change anything.").arg(name(kind_)) : lastMessage_, false, QString());
     // Played onto the timeline as it is now (in case it changed while the AI was thinking), as one step: the
     // thinking scene's sketch, then the cursors (or at once, when Magic isn't shown at work).
-    MagicPlan plan{c_.model().project(), {}};
+    MagicPlan plan{c_->model().project(), {}};
     for (size_t i = 0; i < edits.size(); ++i) plan.tasks.push_back({edits[i], i > 0 ? std::vector<int>{int(i) - 1} : std::vector<int>{}, 0});
     const QString said = lastMessage_.trimmed();
     QPointer<MagicAgent> self(this);
     auto play = [this, self, plan, said] {
         if (!self) return;
-        MagicShow::play(c_, plan, [this, self, said](bool finished) {
+        MagicShow::play(*c_, plan, [this, self, said](bool finished) {
             if (self) emit this->finished(finished ? said : QStringLiteral("Stopped. Nothing was changed."), finished, QString());
         });
     };

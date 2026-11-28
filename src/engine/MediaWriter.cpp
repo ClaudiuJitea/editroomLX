@@ -148,6 +148,7 @@ struct MediaWriter::Impl {
     std::vector<float> pendingAudio; // interleaved, waiting for a full encoder frame
     int64_t audioPts = 0;
     bool headerWritten = false;
+    bool hdr = false;
     QString path;
 
     ~Impl() {
@@ -183,8 +184,12 @@ struct MediaWriter::Impl {
                                               {"libopenh264", AV_HWDEVICE_TYPE_NONE}};
         const std::vector<Candidate> hevc = {{"hevc_vaapi", AV_HWDEVICE_TYPE_VAAPI}, {"hevc_nvenc", AV_HWDEVICE_TYPE_NONE},
                                               {"hevc_vulkan", AV_HWDEVICE_TYPE_VULKAN}, {"libx265", AV_HWDEVICE_TYPE_NONE}};
+        // HDR: 10-bit HEVC. Vulkan Video's 10-bit encode isn't checked for colour (its probe is 8-bit), so it's left out.
+        const std::vector<Candidate> hevc10 = {{"hevc_vaapi", AV_HWDEVICE_TYPE_VAAPI}, {"hevc_nvenc", AV_HWDEVICE_TYPE_NONE},
+                                                {"libx265", AV_HWDEVICE_TYPE_NONE}};
+        hdr = v.hdr;
         const QByteArray only = qgetenv("EDITROOM_ENCODER");
-        for (const Candidate& c : v.hevc ? hevc : h264) {
+        for (const Candidate& c : v.hdr ? hevc10 : v.hevc ? hevc : h264) {
             if (!only.isEmpty() && only != c.name) continue;
             const AVCodec* codec = avcodec_find_encoder_by_name(c.name);
             if (!codec) continue;
@@ -196,10 +201,11 @@ struct MediaWriter::Impl {
             ctx->bit_rate = v.bitrate;
             ctx->gop_size = v.gop;
             ctx->max_b_frames = 0;
-            ctx->color_primaries = AVCOL_PRI_BT709;
-            ctx->color_trc = AVCOL_TRC_BT709;
-            ctx->colorspace = AVCOL_SPC_BT709;
+            ctx->color_primaries = v.hdr ? AVCOL_PRI_BT2020 : AVCOL_PRI_BT709;
+            ctx->color_trc = v.hdr ? AVCOL_TRC_ARIB_STD_B67 : AVCOL_TRC_BT709;
+            ctx->colorspace = v.hdr ? AVCOL_SPC_BT2020_NCL : AVCOL_SPC_BT709;
             ctx->color_range = AVCOL_RANGE_MPEG;
+            if (v.hdr) ctx->profile = AV_PROFILE_HEVC_MAIN_10;
             if (fmt->oformat->flags & AVFMT_GLOBALHEADER) ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
             AVBufferRef* dev = nullptr;
             AVBufferRef* frames = nullptr;
@@ -209,7 +215,7 @@ struct MediaWriter::Impl {
                 frames = av_hwframe_ctx_alloc(dev);
                 auto* fc = reinterpret_cast<AVHWFramesContext*>(frames->data);
                 fc->format = c.hw == AV_HWDEVICE_TYPE_VAAPI ? AV_PIX_FMT_VAAPI : AV_PIX_FMT_VULKAN;
-                fc->sw_format = AV_PIX_FMT_NV12;
+                fc->sw_format = v.hdr ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12;
                 fc->width = v.width;
                 fc->height = v.height;
                 fc->initial_pool_size = 8;
@@ -220,8 +226,11 @@ struct MediaWriter::Impl {
                 ctx->pix_fmt = AV_PIX_FMT_NV12;
                 // libopenh264 takes only planar 4:2:0.
                 if (QByteArray(c.name) == "libopenh264") ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+                // 10-bit: NVENC takes P010; libx265 planar 10-bit.
+                if (v.hdr) ctx->pix_fmt = QByteArray(c.name) == "libx265" ? AV_PIX_FMT_YUV420P10LE : AV_PIX_FMT_P010LE;
             }
-            if (!v.hevc) av_opt_set(ctx->priv_data, "profile", "high", 0);
+            if (!v.hevc && !v.hdr) av_opt_set(ctx->priv_data, "profile", "high", 0);
+            if (v.hdr && QByteArray(c.name) != "libx265") av_opt_set(ctx->priv_data, "profile", "main10", 0);
             if (QByteArray(c.name) == "libx264") av_opt_set(ctx->priv_data, "preset", "medium", 0);
             if (QByteArray(c.name) == "libx265") av_opt_set(ctx->priv_data, "x265-params", "log-level=error", 0);
             if (avcodec_open2(ctx, codec, nullptr) < 0) {
@@ -239,7 +248,9 @@ struct MediaWriter::Impl {
             vst->time_base = ctx->time_base;
             vst->avg_frame_rate = ctx->framerate;
             vframe = av_frame_alloc();
-            vframe->format = ctx->pix_fmt == AV_PIX_FMT_YUV420P ? AV_PIX_FMT_YUV420P : AV_PIX_FMT_NV12;
+            vframe->format = ctx->pix_fmt == AV_PIX_FMT_YUV420P ? AV_PIX_FMT_YUV420P
+                           : ctx->pix_fmt == AV_PIX_FMT_YUV420P10LE ? AV_PIX_FMT_YUV420P10LE
+                           : v.hdr ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12;
             vframe->width = v.width;
             vframe->height = v.height;
             av_frame_get_buffer(vframe, 32);
@@ -358,6 +369,47 @@ bool MediaWriter::writeVideo(const uint8_t* nv12, long long index) {
     I.vframe->color_primaries = AVCOL_PRI_BT709;
     I.vframe->color_trc = AVCOL_TRC_BT709;
     I.vframe->colorspace = AVCOL_SPC_BT709;
+    I.vframe->color_range = AVCOL_RANGE_MPEG;
+    AVFrame* send = I.vframe;
+    if (I.hwFrames) {
+        av_frame_unref(I.hwframe);
+        if (av_hwframe_get_buffer(I.hwFrames, I.hwframe, 0) < 0) return false;
+        if (av_hwframe_transfer_data(I.hwframe, I.vframe, 0) < 0) return false;
+        av_frame_copy_props(I.hwframe, I.vframe);
+        send = I.hwframe;
+    }
+    return avcodec_send_frame(I.venc, send) >= 0 && I.drain(I.venc, I.vst);
+}
+
+bool MediaWriter::isHDR() const { return d->hdr; }
+
+bool MediaWriter::writeVideo10(const uint16_t* p010, long long index) {
+    Impl& I = *d;
+    if (!I.venc || !I.hdr) return false;
+    if (av_frame_make_writable(I.vframe) < 0) return false;
+    const int w = I.venc->width, h = I.venc->height;
+    const int cw = (w + 1) / 2, ch = (h + 1) / 2;
+    const uint16_t* uv = p010 + size_t(w) * h;
+    if (I.vframe->format == AV_PIX_FMT_YUV420P10LE) {
+        // Planar, the value in the bottom 10 bits.
+        for (int y = 0; y < h; ++y) {
+            auto* row = reinterpret_cast<uint16_t*>(I.vframe->data[0] + y * I.vframe->linesize[0]);
+            for (int x = 0; x < w; ++x) row[x] = p010[size_t(y) * w + x] >> 6;
+        }
+        for (int y = 0; y < ch; ++y) {
+            auto* u = reinterpret_cast<uint16_t*>(I.vframe->data[1] + y * I.vframe->linesize[1]);
+            auto* v = reinterpret_cast<uint16_t*>(I.vframe->data[2] + y * I.vframe->linesize[2]);
+            for (int x = 0; x < cw; ++x) { u[x] = uv[(size_t(y) * cw + x) * 2] >> 6; v[x] = uv[(size_t(y) * cw + x) * 2 + 1] >> 6; }
+        }
+    } else {
+        for (int y = 0; y < h; ++y) std::memcpy(I.vframe->data[0] + y * I.vframe->linesize[0], p010 + size_t(y) * w, size_t(w) * 2);
+        for (int y = 0; y < ch; ++y) std::memcpy(I.vframe->data[1] + y * I.vframe->linesize[1], uv + size_t(y) * cw * 2, size_t(cw) * 4);
+    }
+    I.vframe->pts = index;
+    // Tagged as what they are: HLG in Rec.2020.
+    I.vframe->color_primaries = AVCOL_PRI_BT2020;
+    I.vframe->color_trc = AVCOL_TRC_ARIB_STD_B67;
+    I.vframe->colorspace = AVCOL_SPC_BT2020_NCL;
     I.vframe->color_range = AVCOL_RANGE_MPEG;
     AVFrame* send = I.vframe;
     if (I.hwFrames) {

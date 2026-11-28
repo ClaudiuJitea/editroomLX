@@ -125,7 +125,7 @@ std::optional<double> speed(const QString& request) {
 }
 
 void applyMedia(LocalRecipe& r, const std::vector<MediaAsset>& named, const QString& action, const QString& request, const std::set<Uuid>& pointed,
-                bool hasEdit) {
+                bool hasEdit, bool folder) {
     if (named.empty()) return;
     const QString text = request.toLower();
     const bool only = any(text, {"only", "just ", "nothing else", "nothing but", "except", "solely", "keep ", "use the ", "using the "});
@@ -140,14 +140,17 @@ void applyMedia(LocalRecipe& r, const std::vector<MediaAsset>& named, const QStr
     const QString picked = !explicitly && action == QLatin1String("remove") && !remove ? QStringLiteral("only") : action;
     const QString fallback = hasEdit ? QStringLiteral("unchanged") : !explicitly ? picked
                            : !amongOthers && action != QLatin1String("remove") ? QStringLiteral("only") : QStringLiteral("unchanged");
-    const QString mode = only && !remove ? QStringLiteral("only") : remove && !only ? QStringLiteral("remove") : fallback;
+    const QString mode = folder && !remove ? QStringLiteral("only") : only && !remove ? QStringLiteral("only") : remove && !only ? QStringLiteral("remove") : fallback;
+    // A folder named: its files are what's meant, not others that happen to show something in the request.
+    std::vector<MediaAsset> chosen;
+    for (const auto& a : named) if (!folder || pointed.empty() || pointed.count(a.id)) chosen.push_back(a);
     std::set<Uuid> ids;
-    for (const auto& a : named) ids.insert(a.id);
+    for (const auto& a : chosen) ids.insert(a.id);
     if (mode == QLatin1String("only")) r.keepOnly = ids;
     else if (mode == QLatin1String("remove")) r.takeOut = ids;
     else return;
     r.mediaNames.clear();
-    for (const auto& a : named) r.mediaNames << a.name;
+    for (const auto& a : chosen) r.mediaNames << a.name;
     r.clearRest = mode == QLatin1String("only") && any(text, {"nothing else", "everything else", "anything else", "on the timeline", "on timeline"});
     for (const auto& a : named) if (r.cannotDo.toLower().contains(a.name.toLower())) { r.cannotDo.clear(); break; }
 }
@@ -335,11 +338,13 @@ QString without(const QString& cannotDo, std::initializer_list<const char*> abou
 }
 } // namespace
 
-LocalRecipe recipe(const QString& request, const std::vector<MediaAsset>& media, const std::set<Uuid>& pointed, bool hasEdit, const Shows& shows) {
+LocalRecipe recipe(const QString& request, const std::vector<MediaAsset>& media, const std::set<Uuid>& pointed, bool hasEdit, const Shows& shows,
+                   bool folder) {
     static const QStringList notThings = {"make", "the", "and", "use", "using", "only", "just", "clip", "clips", "shot", "shots", "video", "videos", "cut",
         "edit", "fast", "slow", "with", "out", "take", "remove", "keep", "all", "some", "more", "less", "seconds", "second", "minute", "music", "song",
         "look", "vertical", "square", "from", "into", "this", "that", "these", "show", "shows", "showing", "see", "want", "give", "put", "add", "where",
-        "who", "any", "little", "big"};
+        "who", "any", "little", "big",
+        "footage", "media", "file", "files", "folder", "folders", "subfolder", "subfolders", "directly", "inside", "nested", "level"};
     QStringList words;
     for (const QString& w : Transcript::tokens(request)) if (w.size() >= 3 && !notThings.contains(w)) words << w;
     const auto shownFiles = showing(words, media, shows);
@@ -349,7 +354,7 @@ LocalRecipe recipe(const QString& request, const std::vector<MediaAsset>& media,
 
     QString action;
     LocalRecipe r = checked(readSettings(request, &action), request);
-    applyMedia(r, namedFiles, action, request, pointed, hasEdit);
+    applyMedia(r, namedFiles, action, request, pointed, hasEdit, folder);
     for (const auto& a : shownFiles) r.shown.push_back(a.id);
     if (!shownFiles.empty()) if (auto tags = shows(shownFiles.front().id)) {
         QStringList matched;

@@ -266,6 +266,8 @@ Spot spot(const QString& request, const QString& typed, const MagicPointers& ptr
         case MagicMention::Kind::range:
             if (ptr.range) return before ? Spot{ptr.range->start, QStringLiteral("before the marked range")} : Spot{ptr.range->end, QStringLiteral("after the marked range")};
             break;
+        case MagicMention::Kind::folder:
+            continue;
         }
     }
     if (t.contains(QLatin1String("selected")) && !ptr.selected.empty())
@@ -315,7 +317,13 @@ LocalOutcome plan(const QString& request, const QString& typed, const MagicPoint
     const Spot where = spot(request, typed, ptr, p);
     const double at = p.snapFrame(where.time);
     std::vector<Uuid> named;
-    for (const auto& f : MagicMention::find(typed, p.assets)) {
+    const auto folders = MagicMention::folderLabels(p);
+    for (const auto& f : MagicMention::find(typed, p.assets, {}, {}, folders)) {
+        // Every file in a folder they named.
+        if (f.mention.kind == MagicMention::Kind::folder) {
+            for (const auto& fl : folders) if (fl.path == f.mention.path) for (const Uuid& id : fl.filesFor(typed, f.mention.only)) named.push_back(id);
+            continue;
+        }
         if (f.mention.kind != MagicMention::Kind::media) continue;
         const QString lead = typed.left(f.at).toLower().right(16);
         if (lead.contains(QLatin1String("after")) || lead.contains(QLatin1String("before")) || lead.contains(QLatin1String("front of")) || lead.contains(QLatin1String("ahead of"))) continue;

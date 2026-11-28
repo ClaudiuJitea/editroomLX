@@ -40,6 +40,7 @@ struct KeyCombo {
 /// Everything that has a keyboard shortcut.
 enum class ShortcutAction {
     new_, open, save, saveAs, importMedia, export_,
+    newTab, closeTab, previousTab, nextTab,
     undo, redo,
     playPause, stepBack, stepForward, previousEdit, nextEdit, goToStart, goToEnd, loop, fullScreenViewer,
     selectTool, cutTool,

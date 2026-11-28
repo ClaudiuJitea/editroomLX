@@ -226,6 +226,8 @@ struct GpuRenderer::Impl {
         int stagingW = 0, stagingH = 0;
         bool stale = true;
         int wantW = 0, wantH = 0;
+        // The part of the composite shown (a zoomed viewer shows what's in view).
+        double x0 = 0, y0 = 0, x1 = 1, y1 = 1;
         // Tests: the next presented image copied back (BGRA or RGBA as the window has it).
         bool capture = false;
         Buffer captured;
@@ -673,10 +675,13 @@ std::vector<uint8_t> GpuRenderer::run(const FrameJob& job, int mode) {
     }
     const size_t pixelsOut = size_t(w) * h;
     const size_t nv12Bytes = pixelsOut + size_t((w + 1) / 2) * ((h + 1) / 2) * 2;
-    const size_t outBytes = mode == 2 ? align4(nv12Bytes) : pixelsOut * 4;
+    // P010 (mode 4, an HDR export): 16-bit samples, the Y plane then interleaved CbCr.
+    const size_t p010Bytes = (pixelsOut + size_t((w + 1) / 2) * ((h + 1) / 2) * 2) * 2;
+    const size_t outBytes = mode == 2 ? align4(nv12Bytes) : mode == 4 ? align4(p010Bytes) : pixelsOut * 4;
+    const bool floats = mode == 1 || mode == 2 || mode == 4;
     if (!I.ensure(0, sizeof(cm::ErFrame)) || !I.ensure(1, job.layers.size() * sizeof(cm::ErLayer)) ||
         !I.ensure(2, sources.size() * sizeof(cm::ErSource)) || !I.ensure(4, job.cubes.size() * sizeof(float)) ||
-        !I.ensure(5, outBytes) || !I.ensure(6, mode == 1 || mode == 2 ? pixelsOut * 16 : 16))
+        !I.ensure(5, outBytes) || !I.ensure(6, floats ? pixelsOut * 16 : 16))
         return {};
     std::memcpy(I.bufs[0].mapped, &job.frame, sizeof(cm::ErFrame));
     if (!job.layers.empty()) std::memcpy(I.bufs[1].mapped, job.layers.data(), job.layers.size() * sizeof(cm::ErLayer));
@@ -742,17 +747,20 @@ std::vector<uint8_t> GpuRenderer::run(const FrameJob& job, int mode) {
         vkCmdPipelineBarrier(I.cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
     }
     vkCmdBindDescriptorSets(I.cmd, VK_PIPELINE_BIND_POINT_COMPUTE, I.pipeLayout, 0, 1, &I.set, 0, nullptr);
-    const int composeMode = mode == 1 || mode == 2 ? 1 : 0;   // floats for renderFloat and the NV12 pack
+    const int composeMode = floats ? 1 : 0;   // floats for renderFloat and the NV12 and P010 packs
     vkCmdPushConstants(I.cmd, I.pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 4, &composeMode);
     vkCmdBindPipeline(I.cmd, VK_PIPELINE_BIND_POINT_COMPUTE, I.compose);
     vkCmdDispatch(I.cmd, uint32_t((w + 15) / 16), uint32_t((h + 15) / 16), 1);
-    if (mode == 2) {
+    if (mode == 2 || mode == 4) {
         VkMemoryBarrier mb{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
         mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         vkCmdPipelineBarrier(I.cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &mb, 0, nullptr, 0, nullptr);
         vkCmdBindPipeline(I.cmd, VK_PIPELINE_BIND_POINT_COMPUTE, I.pack);
-        const uint32_t words = uint32_t((pixelsOut + 3) / 4 + ((size_t((w + 1) / 2) * ((h + 1) / 2) * 2) + 3) / 4);
+        const int packMode = mode == 4 ? 1 : 0;   // 0: NV12, 1: P010
+        vkCmdPushConstants(I.cmd, I.pipeLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, 4, &packMode);
+        const uint32_t words = mode == 4 ? uint32_t(p010Bytes / 4 + 1)
+                                         : uint32_t((pixelsOut + 3) / 4 + ((size_t((w + 1) / 2) * ((h + 1) / 2) * 2) + 3) / 4);
         vkCmdDispatch(I.cmd, (words + 63) / 64, 1, 1);
     }
     if (mode == 3) {
@@ -787,7 +795,11 @@ std::vector<uint8_t> GpuRenderer::run(const FrameJob& job, int mode) {
                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
         VkImageBlit blit{};
         blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        blit.srcOffsets[1] = VkOffset3D{w, h, 1};
+        // The part in view (all of it unless the viewer's zoomed in).
+        const int sx0 = std::clamp(int(std::floor(P.x0 * w)), 0, w - 1), sy0 = std::clamp(int(std::floor(P.y0 * h)), 0, h - 1);
+        const int sx1 = std::clamp(int(std::ceil(P.x1 * w)), sx0 + 1, w), sy1 = std::clamp(int(std::ceil(P.y1 * h)), sy0 + 1, h);
+        blit.srcOffsets[0] = VkOffset3D{sx0, sy0, 0};
+        blit.srcOffsets[1] = VkOffset3D{sx1, sy1, 1};
         blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         blit.dstOffsets[1] = VkOffset3D{int32_t(P.extent.width), int32_t(P.extent.height), 1};
         vkCmdBlitImage(I.cmd, P.staging, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swap, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
@@ -873,6 +885,9 @@ std::vector<uint8_t> GpuRenderer::run(const FrameJob& job, int mode) {
     } else if (mode == 2) {
         out.resize(nv12Bytes);
         std::memcpy(out.data(), I.bufs[5].mapped, nv12Bytes);
+    } else if (mode == 4) {
+        out.resize(p010Bytes);
+        std::memcpy(out.data(), I.bufs[5].mapped, p010Bytes);
     } else {
         out.resize(pixelsOut * 4);
         std::memcpy(out.data(), I.bufs[5].mapped, out.size());
@@ -881,6 +896,13 @@ std::vector<uint8_t> GpuRenderer::run(const FrameJob& job, int mode) {
 }
 
 std::vector<uint8_t> GpuRenderer::render(const FrameJob& job) { return run(job, 0); }
+
+std::vector<uint16_t> GpuRenderer::renderP010(const FrameJob& job) {
+    const auto bytes = run(job, 4);
+    std::vector<uint16_t> out(bytes.size() / 2);
+    if (!bytes.empty()) std::memcpy(out.data(), bytes.data(), out.size() * 2);
+    return out;
+}
 
 void* GpuRenderer::vkInstance() const { return d->surfaceExt && d->swapchainExt ? reinterpret_cast<void*>(d->instance) : nullptr; }
 
@@ -902,6 +924,14 @@ bool GpuRenderer::setSurface(void* surface, int width, int height) {
 }
 
 bool GpuRenderer::present(const FrameJob& job) { return !run(job, 3).empty(); }
+
+void GpuRenderer::setPresentRegion(double x0, double y0, double x1, double y1) {
+    std::lock_guard g(d->lock);
+    d->present.x0 = std::clamp(x0, 0.0, 1.0);
+    d->present.y0 = std::clamp(y0, 0.0, 1.0);
+    d->present.x1 = std::clamp(x1, d->present.x0, 1.0);
+    d->present.y1 = std::clamp(y1, d->present.y0, 1.0);
+}
 
 long long GpuRenderer::dmabufImports() const { std::lock_guard g(d->lock); return d->importedCount; }
 

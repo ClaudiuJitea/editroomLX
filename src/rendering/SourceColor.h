@@ -31,6 +31,9 @@ std::tuple<double, double, double> convert(SourceColor kind, double r, double g,
 /// RGBA float data (64³·4, red fastest), or null for `standard`. Made once per kind.
 std::shared_ptr<const std::vector<float>> cube(SourceColor kind);
 const char* name(SourceColor kind);
+/// HDR that an HDR project keeps as HDR (HLG and PQ, with Dolby Vision or not).
+inline bool isHDR(SourceColor k) { return k == SourceColor::hlg || k == SourceColor::pq || k == SourceColor::hlgVision || k == SourceColor::pqVision; }
+inline bool isPQ(SourceColor k) { return k == SourceColor::pq || k == SourceColor::pqVision; }
 } // namespace SourceColors
 
 } // namespace er

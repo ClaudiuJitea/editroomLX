@@ -32,6 +32,10 @@ QByteArray saveBytes(const SavedDocument& d);
 /// As the Mac's autosave and recovery write it (compact). LX sorts keys here too, for stable diffs.
 QByteArray compactBytes(const SavedDocument& d);
 
+/// One grade, for tests (the Mac's GRADE LEVELS check reads a grade from before its levels existed).
+QJsonObject encode(const ColorGrade& g);
+ColorGrade decodeGrade(const QJsonObject& o);
+
 QJsonObject encode(const Transcript& t);
 std::optional<Transcript> decodeTranscript(const QJsonObject& o);
 

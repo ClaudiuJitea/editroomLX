@@ -5,7 +5,8 @@ This is the prompt for building and maintaining **Editroom LX**: the Linux versi
 Never change `../editroom/`: it is the reference. The step-by-step plan is in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
 Mac baseline for the first port: `editroom@7b7b865` (version 1.0.3, build 4, 2026-11-25). Current baseline:
-`editroom@4272a42` (version 1.0.10, build 11, 2026-11-27); see `docs/sync/`.
+`editroom@5f31e48` (version 1.1.2, build 16, 2026-11-27); see `docs/sync/`. LX takes the Mac's version number in
+each sync (LX 1.1.2 is Mac 1.1.2), with a fourth number for LX-only releases in between.
 
 ---
 
@@ -17,9 +18,12 @@ Match the Mac app in:
   shows: ripple trim (Q/W), sticky edges, ducking, speed ramps, zoom moves, reversed clips that play straight
   from the original file, HDR/HLG/PQ/Apple Log to Rec.709, captions read from transcripts, linked media
   folders, the export queue, loudness targets, reframed export shapes, Magic (Claude / ChatGPT / Local), and
-  the MCP server and its 60-plus tools.
-- **UI layout.** Media panel on the left (252 px, resizable 190–440), viewer in the middle, inspector on the
-  right (320 px), timeline below (360 px, resizable). The window opens at 1480×940 with a minimum of 1080×680,
+  the MCP server and its 60-plus tools. Since 1.1: project tabs (several projects in one window, copy and paste
+  between them), HDR projects (HLG in Rec.2020, exported as 10-bit HEVC), a brightness for each tonal range of the
+  grade and an eye to switch a grade off, a speech language for transcription, and `@folder:` mentions in Magic.
+- **UI layout.** A title strip with the project tabs (and the export pill, Magic and Export), then the Media panel
+  on the left (252 px, resizable 190–440), viewer in the middle, inspector on the right (320 px), timeline below
+  (360 px, resizable); the panels' sizes are the same in every tab. The window opens at 1480×940 with a minimum of 1080×680,
   and fills the screen on first launch. Use the same five themes (Auto, Dark, Grey, Amber, Light) with the exact
   palette hex values from `UI/Theme.swift`, and the same 13 px / 11.5 px type scale, pill buttons, hairlines and
   splitters. Match `docs/screenshot.webp` and the mocks in `design/`.
@@ -27,9 +31,9 @@ Match the Mac app in:
   quotes, the "−∞ dB" minus sign, alerts, empty states, tooltips, the cursor tags ("placing boat_wide") and
   error messages ("The timeline is empty."). Collect the strings in one table so a sync can diff them.
 - **Menus.** The same menus, items, order, separators and enabled/disabled rules (File, Edit, Clip, Mark,
-  View). The Mac app menu has no Linux equivalent, so: About Editroom and Check for Updates… go under Help,
-  Settings… goes under Edit (Ctrl+,), Quit goes under File (Ctrl+Q). Like the Mac, there is no Close or
-  Ctrl+W (one editor window).
+  View, and Window for Show Previous/Next Tab). The Mac app menu has no Linux equivalent, so: About Editroom and
+  Check for Updates… go under Help, Settings… goes under Edit (Ctrl+,), Quit goes under File (Ctrl+Q). There is
+  one editor window; Close Tab (Ctrl+W) closes a tab, and on the only tab closes its project.
 - **Shortcuts.** The same `ShortcutAction` list and defaults, mapped ⌘→Ctrl, ⌥→Alt, ⇧→Shift, ⌃→Meta. ⌫ is
   Backspace and ⌦ is Delete. They stay editable in Settings › Shortcuts. Keep the Mac's rules: plain-key
   shortcuts are typed as text inside a text field, Escape always cancels, and a combo given to one action is
@@ -38,25 +42,31 @@ Match the Mac app in:
   (Reverse) work.
 - **Defaults.** The same values for every setting and model default: `ColorGrade()`, `Track.duckDB = -12`,
   `TextStyle.size = 110`, transition 0.5 s, autosave on, timecode display, theme Dark, the shortcut defaults,
-  the export defaults (H.264, High, sequence size, audio on), MCP port 47920, and so on. Read settings and
-  write them under the **same key names** (`appearance`, `autosave`, `timeStyle`, `snapping`/`stickyEdges`/…,
-  `magicTab`, `shortcuts`…), using QSettings.
+  the export defaults (H.264, High, sequence size, audio on), MCP port 47920, a project's dynamic range SDR
+  (`hdr` left out), the speech language Automatic, and so on. Read settings and write them under the **same key
+  names** (`appearance`, `autosave`, `timeStyle`, `snapping`/`stickyEdges`/…, `magicTab`, `shortcuts`,
+  `speechLanguage`, `tabSlots`, `activeTab`, `lastSession` and `recoveryFor` with a tab's slot after a dot…), using
+  QSettings.
 - **Undo.** The Mac's undo works on project snapshots: up to 200 steps, live drags and sliders merge into one
   step (0.8 s auto-commit), `amendLastStep` adds to the step before, and the library and Magic history are
-  never undone (except that items a step deleted come back). The menu items are plain "Undo" / "Redo" with
-  no action names. Copy this exactly. Don't add named undo the Mac doesn't have.
+  never undone (except that items a step deleted come back; media a paste brought from another tab stays). Each
+  tab has its own history. The menu items are plain "Undo" / "Redo" with no action names. Copy this exactly. Don't add named undo the Mac doesn't have.
 - **File format.** `.room` files are JSON `SavedDocument {version: 1, project}`, written pretty-printed with
   sorted keys. LX must **read every Mac project and write files the Mac reads**, and round-trip what it
   doesn't use: `bookmark` (macOS bookmark data, base64), `playablePath`, and unknown keys. Encode the way
   Swift's `JSONEncoder` does: UUIDs as upper-case strings, `Data` as base64, a `[UUID: T]` dictionary as a
   flat `[key, value, key, value]` array (`captionFixes`), optionals left out when nil, and doubles in their
   shortest round-trip form. Keep the same caches and sidecars: transcripts, scene tags, media notes, analysis
-  and reversed audio, each keyed by path, size and date.
+  and reversed audio, each keyed by path, size and date. Each tab keeps its own recovery copy
+  (`Untitled.room` for the first, `Untitled <slot>.room` for the others; test launches `Untitled (test).room`).
 - **Pixel output.** The compositor must give the same pixels as `TimelineCompositor` + Core Image: fit scale,
   orientation, the HDR/Log 64³ cube, transform, wipe, the 32³ grade cube (trilinear, as `CIColorCube`), opacity
-  through the alpha vector, premultiplied source-over, captions in output space, and the reframe crop. It is
-  unmanaged (Rec.709 values in, Rec.709 values out) and tagged BT.709. Test it against reference frames
-  rendered on the Mac (see "Proof" below).
+  through the alpha vector, premultiplied source-over, captions in output space, and the reframe crop. An SDR
+  project is unmanaged (Rec.709 values in, Rec.709 values out) and tagged BT.709. An HDR project is put together
+  in linear Rec.2020 with SDR white at 1.0 (BT.2408: HLG 0.75), HDR clips kept as HDR (PQ made HLG), SDR clips,
+  titles and solids at standard white, the grade worked on the HLG signal, and written as HLG tagged BT.2020; the
+  maths is written down in `src/rendering/ColorMath.h`. Test it against reference frames rendered on the Mac (see
+  "Proof" below).
 
 For each **Mac-only technology**, research the closest Linux equivalent and copy its behaviour. Starting
 points (IMPLEMENTATION.md §3 has the full table):
@@ -74,6 +84,9 @@ points (IMPLEMENTATION.md §3 has the full table):
 | Sparkle | GitHub's releases API for `ClaudiuJitea/editroomLX` (the owner's choice), opening the release page to update |
 | MetalFX spatial upscaler (export) | AMD FidelityFX Super Resolution 1 EASU (MIT), in the shared kernel |
 | AVFoundation HDR→SDR on read | The curve the Mac fitted to macOS's own conversion (SourceColor) |
+| Core Image colour management in extended linear Rec.2020 (HDR projects) | BT.2100 HLG/PQ, BT.709 and sRGB curves and BT.2087's 709→2020 matrix, written down in `ColorMath.h` and run in the shared kernel |
+| EDR (HDR on the Mac's screen) | An HDR project is shown as SDR (white at white, highlights clipped) until an HDR swapchain on an HDR screen can be checked |
+| `SpeechTranscriber` locales | whisper.cpp's languages; Automatic lets whisper.cpp detect each clip's language |
 | File promises (Photos drags) | None needed: Linux drops are plain file paths |
 | AppKit / SwiftUI | Qt 6 Widgets with a QSS + QPainter style that matches the Mac exactly, and a custom `QProxyStyle` |
 | NSWorkspace / bundle IDs / `.mcpb` | XDG (`.desktop`, MIME type `application/x-editroom`), `claude mcp add`, `~/.codex/config.toml`; Claude Desktop only if it is installed on Linux |
@@ -83,7 +96,8 @@ points (IMPLEMENTATION.md §3 has the full table):
 LX does instead. Known cases: macOS bookmark resolution (LX keeps the data and finds files through
 `relativePath` and the folder), the Cut and Play settings migration (there was never a Linux Cut and Play),
 `MenuCleanup` (Qt adds no system menu items), the SF Pro font (it may not be redistributed; LX ships Inter),
-and Apple's aesthetics model (LX uses the nearest open model, labelled as an approximation).
+Apple's aesthetics model (LX uses the nearest open model, labelled as an approximation), and EDR in the viewer
+(see above).
 
 ---
 
@@ -92,8 +106,9 @@ and Apple's aesthetics model (LX uses the nearest open model, labelled as an app
 - **Where the Mac does something on the GPU (Metal, Core Image), LX does it on the GPU too**, through the
   shared Vulkan renderer: `src/rendering/GpuRenderer`, `src/rendering/GpuVulkan.cpp` and
   `shaders/rendering.comp`. Don't leave a ported feature CPU-only when the Mac runs it on the GPU. That covers
-  the timeline compositor, YUV→RGB, the HDR/Log conversion, scaling and orientation, transforms and zoom moves,
-  wipes and dissolves, grade cubes, opacity, caption and text overlay, reframe, RGB→YUV for the encoder,
+  the timeline compositor, YUV→RGB, the HDR/Log conversion, an HDR project's linear Rec.2020 composite, scaling
+  and orientation, transforms and zoom moves, wipes and dissolves, grade cubes, opacity, caption and text overlay,
+  reframe, RGB→YUV for the encoder (NV12, and P010 for HDR),
   thumbnails and filmstrip frames from HDR files (`ColorFrameGrabber`), and frame scaling (`VTPixelTransferSession`).
   Where the Mac uses the media engine or the Neural Engine (VideoToolbox, Vision, Speech, Foundation Models),
   LX uses the GPU or hardware video blocks too: VA-API / NVDEC / NVENC / Vulkan Video, an ONNX Runtime GPU
@@ -146,7 +161,8 @@ The Mac app moves fast (374 commits so far). LX follows it in **syncs**:
 - **Golden frames.** A Mac-side script (`--render-frames <project.room> <times> <outDir>`, to be added to
   the Mac app, or run there from `scripts/mac/`) writes reference PNGs. LX renders the same frames on the GPU
   and on the CPU. Both must be within tolerance of the Mac's (ΔE2000 mean ≤ 1.0 and max ≤ 3.0 on picture
-  content; text and captions are measured separately, since the fonts differ).
+  content; text and captions are measured separately, since the fonts differ). HDR projects are checked on the
+  10-bit HLG output as well (the Mac's self-test levels: HLG 0.75 and 0.95 kept, SDR white at 0.75).
 - **Format round-trip.** Every `.room` in the test corpus opens, saves and re-opens unchanged
   (semantically equal JSON). A file saved by LX opens on the Mac.
 - **Behaviour.** Port the Mac's `SelfTest.swift` checks (the timeline geometry, edits, the export settings

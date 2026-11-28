@@ -41,7 +41,8 @@ protected:
         QTextCharFormat bold;
         bold.setFontWeight(QFont::DemiBold);
         const Project& p = model_.project();
-        for (const auto& f : MagicMention::find(text, p.assets, MagicMention::clipLabels(p), MagicMention::markerLabels(p))) setFormat(f.at, f.length, bold);
+        for (const auto& f : MagicMention::find(text, p.assets, MagicMention::clipLabels(p), MagicMention::markerLabels(p), MagicMention::folderLabels(p)))
+            setFormat(f.at, f.length, bold);
         for (const auto& [at, len] : MagicTimes::recognised(text)) setFormat(at, len, bold);
     }
 private:
@@ -91,6 +92,35 @@ std::vector<MentionOption> MentionOption::list(const QString& query, const Edito
             for (const auto& l : markers) if (!l.name.toLower().startsWith(rest) && l.name.toLower().contains(rest)) out.push_back(mark(l));
         return out;
     }
+    // "@folder:" and after: every folder in Media (and the folders inside them), narrowed by name.
+    const auto folders = MagicMention::folderLabels(p);
+    auto filesText = [](size_t n) { return QStringLiteral("%1 file%2").arg(n).arg(n == 1 ? QString() : QStringLiteral("s")); };
+    /// A folder, and after it, for one with folders inside, the same folder without them (`:only`).
+    auto folderRows = [&](const MagicMention::FolderLabel& f) {
+        std::vector<MentionOption> rows;
+        rows.push_back({f.path, QStringLiteral("folder:") + f.name, (f.label == f.name ? QString() : f.label + QStringLiteral("  ·  ")) + filesText(f.files.size())});
+        if (f.hasSubfolders())
+            rows.push_back({f.path + QStringLiteral(":only"), QStringLiteral("folder:") + f.name + QStringLiteral(":only"), QStringLiteral("no sub-folders, ") + filesText(f.direct.size())});
+        return rows;
+    };
+    if (q.startsWith(QLatin1String("folder:"))) {
+        const QString rest = q.mid(7);
+        std::vector<MentionOption> out;
+        // "@folder:footage:" and on: just that folder's two rows.
+        std::vector<const MagicMention::FolderLabel*> whole;
+        for (const auto& f : folders) {
+            const QString n = f.name.toLower();
+            if (rest.startsWith(n + u':') && (n + QStringLiteral(":only")).startsWith(rest)) whole.push_back(&f);
+        }
+        if (!whole.empty()) {
+            for (const auto* f : whole) for (auto& r : folderRows(*f)) if (r.name.toLower().startsWith(QStringLiteral("folder:") + rest)) out.push_back(r);
+            return out;
+        }
+        for (const auto& f : folders) if (f.name.toLower().startsWith(rest)) for (auto& r : folderRows(f)) out.push_back(r);
+        if (!rest.isEmpty())
+            for (const auto& f : folders) if (!f.name.toLower().startsWith(rest) && f.label.toLower().contains(rest)) for (auto& r : folderRows(f)) out.push_back(r);
+        return out;
+    }
     if (q.startsWith(QLatin1String("media:"))) {
         const QString rest = q.mid(6);
         if (auto it = kinds.find(rest); it != kinds.end()) {
@@ -118,6 +148,8 @@ std::vector<MentionOption> MentionOption::list(const QString& query, const Edito
         const int n = int(p.assets.size());
         pointers.push_back({QStringLiteral("media"), QStringLiteral("media:"), QStringLiteral("%1 file%2  ›").arg(n).arg(n == 1 ? QString() : QStringLiteral("s")), true, true});
     }
+    if (!folders.empty())
+        pointers.push_back({QStringLiteral("folder"), QStringLiteral("folder:"), QStringLiteral("%1 folder%2  ›").arg(folders.size()).arg(folders.size() == 1 ? QString() : QStringLiteral("s")), true, true});
     const int onTimeline = int(MagicMention::clipLabels(p).size());
     if (onTimeline > 0) pointers.push_back({QStringLiteral("clip"), QStringLiteral("clip:"), QStringLiteral("%1 on the timeline  ›").arg(onTimeline), true, true});
     if (!markers.empty()) pointers.push_back({QStringLiteral("marker"), QStringLiteral("marker:"), QStringLiteral("%1 on the timeline  ›").arg(markers.size()), true, true});
@@ -161,6 +193,9 @@ void MentionField::refreshList() {
     // so the candidate list stays. Plain typing never composes, so mentions still update on every key.
     if (const QTextLayout* l = textCursor().block().layout(); l && !l->preeditAreaText().isEmpty()) return;
     const auto q = query();
+    // A list closed on this `@` (Esc, or picked from) stays closed until the cursor is in another.
+    if (!q || q->first != dismissed_) dismissed_.reset();
+    if (dismissed_) { options_.clear(); list_->hide(); return; }
     options_ = q ? MentionOption::list(q->second, model_) : std::vector<MentionOption>{};
     // Exactly what's typed already: nothing to offer.
     if (options_.size() == 1 && q && options_[0].name.compare(q->second, Qt::CaseInsensitive) == 0 && !options_[0].opensList) options_.clear();
@@ -188,6 +223,9 @@ void MentionField::pick(int row) {
     QTextCursor c = textCursor();
     c.setPosition(q->first);
     c.setPosition(q->first + 1 + int(q->second.size()), QTextCursor::KeepAnchor);
+    // Picked: the list closes and stays closed, even though what's after the `@` could still match more
+    // ("@folder:footage " is the start of "footage / _stills").
+    if (!o.opensList) dismissed_ = q->first;
     c.insertText(u'@' + o.name + (o.opensList ? QString() : QStringLiteral(" ")));
     setTextCursor(c);
     refreshList();
@@ -213,6 +251,7 @@ void MentionField::keyPressEvent(QKeyEvent* e) {
             pick(list_->currentRow());
             return;
         case Qt::Key_Escape:
+            if (const auto q = query()) dismissed_ = q->first;
             options_.clear();
             list_->hide();
             return;
