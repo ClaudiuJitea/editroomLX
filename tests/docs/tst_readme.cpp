@@ -18,6 +18,9 @@
 #include <QPlainTextEdit>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryDir>
+#include <QFile>
+#include "model/Codec.h"
 #include <QTest>
 
 using namespace er;
@@ -29,6 +32,7 @@ class TestReadme : public QObject {
     std::unique_ptr<MainWindow> w;
     Controller* c = nullptr;
     std::map<QString, MediaAsset> assets;
+    QTemporaryDir projects;
     Uuid graded, title;
 
     void settle(int ms = 400) { QTest::qWait(ms); }
@@ -99,6 +103,21 @@ private slots:
             p.markers->push_back(m);
         });
         c->model().zoomToFit();
+        // Tabs (1.1): this cut saved as "Road Trip" in front, two more projects open behind it.
+        QVERIFY(c->model().writeTo(projects.filePath(QStringLiteral("Road Trip.room"))));
+        for (const char* name : {"Interview", "Product Teaser"}) {
+            Project q;
+            Clip solid(q.videoTracks[0].id, ClipKind::solid, 0, 5);
+            q.clips = {solid};
+            QFile f(projects.filePath(QLatin1String(name) + QStringLiteral(".room")));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(codec::saveBytes(SavedDocument{1, q, {}}));
+            f.close();
+            ws->open(f.fileName());
+        }
+        ws->select(0);
+        QCOMPARE(ws->count(), 3);
+        QCOMPARE(&w->controller(), c);
     }
 
     void editor() {
